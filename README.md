@@ -113,7 +113,7 @@ v1.0.0 release. See [examples/README.md](examples/README.md) and
 * [Radio materials](docs/radio-materials.md)
 * [Output schemas](docs/output-schemas/)
 * [Release and Zenodo archiving](docs/release-and-archiving.md)
-* \- \[Third-party software and citations](THIRD\_PARTY\_SOFTWARE.md)
+* [Third-party software and citations](THIRD_PARTY_SOFTWARE.md)
 
 ## Citation
 
@@ -123,23 +123,15 @@ v1.0.0 GitHub release is archived in Zenodo, add the version DOI to both
 
 
 
-\## Third-party software and citations
-
-
+## Third-party software and citations
 
 SionnaRT-Bridge depends on separately distributed scientific software,
-
 including Sionna RT, Mitsuba 3, Dr.Jit, Blender, and Mitsuba-Blender 4.5
-
 Compatibility.
 
-
-
 Their tested versions, licenses, upstream repositories, provenance, and
-
 citation guidance are documented in
-
-\[THIRD\_PARTY\_SOFTWARE.md](THIRD\_PARTY\_SOFTWARE.md).
+[THIRD_PARTY_SOFTWARE.md](THIRD_PARTY_SOFTWARE.md).
 
 
 
