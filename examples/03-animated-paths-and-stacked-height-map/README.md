@@ -3,7 +3,7 @@
 This example demonstrates frame-dependent propagation-path computation and
 stacked-height radio-map visualization in an urban Blender scene.
 
-![Animated SionnaRT-Bridge result](preview.gif)
+![Animated propagation paths and stacked-height radio map](preview.gif)
 
 ## Demonstrated features
 
