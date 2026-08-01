@@ -7,7 +7,7 @@ visualization. Numerical computations run in a separate Python environment
 with Sionna RT.
 
 This repository is the publication-facing source tree for **version 1.0.0**.
-The installable Blender extension is built from `src/sionnart\_bridge/`.
+The installable Blender extension is built from `src/sionnart\\\_bridge/`.
 
 ## Main capabilities
 
@@ -35,7 +35,7 @@ verify its SHA-256 before installing SionnaRT-Bridge.
 
 ## Installation
 
-1. Download `sionnart\_bridge-1.0.0.zip` from the GitHub release assets.
+1. Download `sionnart\\\_bridge-1.0.0.zip` from the GitHub release assets.
 2. In Blender, open **Edit → Preferences → Get Extensions → Install from Disk**
 and select the downloaded ZIP file.
 3. Create a Python 3.11 virtual environment for Sionna RT and install the
@@ -43,7 +43,7 @@ external dependency:
 
 ```bash
    python3.11 -m venv .venv-sionna
-   source .venv-sionna/bin/activate   # Windows: .venv-sionna\\Scripts\\activate
+   source .venv-sionna/bin/activate   # Windows: .venv-sionna\\\\Scripts\\\\activate
    python -m pip install --upgrade pip
    python -m pip install -r requirements-external.txt
    ```
@@ -55,8 +55,8 @@ See [docs/installation.md](docs/installation.md) for the complete procedure.
 
 ## Quick start
 
-1. Use **Create / Repair Env** to create the controlled `sionna\_env` hierarchy.
-2. Place simulation geometry under `sionna\_env/scene`.
+1. Use **Create / Repair Env** to create the controlled `sionna\\\_env` hierarchy.
+2. Place simulation geometry under `sionna\\\_env/scene`.
 3. Assign radio materials and create or mark transmitter and receiver objects.
 4. Configure the external environment, antenna arrays, solver settings, and
 desired output type.
@@ -69,19 +69,19 @@ Detailed attribute definitions are in [docs/output-schemas](docs/output-schemas/
 Using Blender 4.5 LTS:
 
 ```bash
-blender --command extension validate --source-dir src/sionnart\_bridge
-blender --command extension build \\
-  --source-dir src/sionnart\_bridge \\
+blender --command extension validate --source-dir src/sionnart\\\_bridge
+blender --command extension build \\\\
+  --source-dir src/sionnart\\\_bridge \\\\
   --output-dir dist
 ```
 
 A Python-only deterministic build helper is also provided:
 
 ```bash
-python scripts/build\_extension.py
+python scripts/build\\\_extension.py
 ```
 
-The expected release asset is `dist/sionnart\_bridge-1.0.0.zip`.
+The expected release asset is `dist/sionnart\\\_bridge-1.0.0.zip`.
 
 ## Tests
 
@@ -90,7 +90,7 @@ The repository includes source/metadata tests that can run without Blender:
 ```bash
 python -m pip install -r requirements-dev.txt
 pytest
-python scripts/check\_release.py
+python scripts/check\\\_release.py
 ```
 
 Full scientific validation requires Blender 4.5 LTS, the exact Mitsuba export
@@ -113,12 +113,35 @@ v1.0.0 release. See [examples/README.md](examples/README.md) and
 * [Radio materials](docs/radio-materials.md)
 * [Output schemas](docs/output-schemas/)
 * [Release and Zenodo archiving](docs/release-and-archiving.md)
+* \- \[Third-party software and citations](THIRD\_PARTY\_SOFTWARE.md)
 
 ## Citation
 
 Citation metadata are provided in [`CITATION.cff`](CITATION.cff). After the
 v1.0.0 GitHub release is archived in Zenodo, add the version DOI to both
 `CITATION.cff` and the SoftwareX manuscript.
+
+
+
+\## Third-party software and citations
+
+
+
+SionnaRT-Bridge depends on separately distributed scientific software,
+
+including Sionna RT, Mitsuba 3, Dr.Jit, Blender, and Mitsuba-Blender 4.5
+
+Compatibility.
+
+
+
+Their tested versions, licenses, upstream repositories, provenance, and
+
+citation guidance are documented in
+
+\[THIRD\_PARTY\_SOFTWARE.md](THIRD\_PARTY\_SOFTWARE.md).
+
+
 
 ## License
 
