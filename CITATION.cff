@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use SionnaRT-Bridge, please cite the archived software release and the accompanying SoftwareX paper."
+title: "SionnaRT-Bridge"
+type: software
+version: 1.0.0
+authors:
+  - family-names: "Ribas"
+    given-names: "Felipe Oliveira"
+  - family-names: "Vermeeren"
+    given-names: "Günter"
+  - family-names: "Joseph"
+    given-names: "Wout"
+repository-code: "https://github.com/fribas001/sionnart-bridge"
+url: "https://github.com/fribas001/sionnart-bridge"
+license: GPL-3.0-or-later
+keywords:
+  - Sionna RT
+  - Blender
+  - radio propagation
+  - ray tracing
+  - radio map
+  - Geometry Nodes
+  - scientific visualization

@@ -1,0 +1,3 @@
+# External Python 3.11 environment used by SionnaRT-Bridge v1.0.0
+# Pin the exact validated release for reproducibility.
+sionna-rt==2.0.1

@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible SionnaRT-Bridge problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: SionnaRT-Bridge version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Environment
+      description: Blender, OS, Python, Sionna RT, Mitsuba, backend, CPU/GPU
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps and logs
+    validations:
+      required: true

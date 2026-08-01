@@ -1,0 +1,9 @@
+SionnaRT-Bridge
+Copyright (C) 2026 Felipe Oliveira Ribas and contributors
+
+This repository interfaces with Sionna RT, Mitsuba 3, Dr.Jit, Blender, and a
+separately distributed Mitsuba-Blender compatibility extension. Those projects
+are not bundled here and retain their own copyrights, trademarks, and licenses.
+
+Institutional ownership and the final copyright line must be confirmed with
+Ghent University-imec before the public v1.0.0 release.
