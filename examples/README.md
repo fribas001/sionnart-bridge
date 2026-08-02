@@ -7,3 +7,10 @@ SionnaRT-Bridge. An animated preview is currently available under
 The corresponding Blender scenes, native Sionna RT reference scripts,
 simulation configurations, expected numerical outputs, checksums, and
 hardware/runtime metadata will be added before the archived v1.0.0 release.
+
+- [`procedural-vegetation-paths`](procedural-vegetation-paths/) —
+  frame-dependent procedural plant growth and its effect on propagation
+  paths.
+
+- [`urban-stacked-height-map`](urban-stacked-height-map/) — animated
+  stacked-height radio-map visualization in the Munich urban scene.
