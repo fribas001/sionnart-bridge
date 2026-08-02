@@ -1,4 +1,4 @@
-\# Procedural vegetation growth and propagation paths
+﻿\# Procedural vegetation growth and propagation paths
 
 
 
@@ -26,7 +26,7 @@ resulting paths as attributed Blender geometry.
 
 
 
-\- `sionnart\_example\_vegetation\_procedural\_scene.blend` — complete Blender
+\- `sionnart\_example\_vegetation\_procedural\_scene.blend` â€” complete Blender
 
 &#x20; scene containing the procedural plant, transmitter, receiver, simulation
 
@@ -34,9 +34,9 @@ resulting paths as attributed Blender geometry.
 
 &#x20; camera, and animation.
 
-\- `procedural\_plant\_propagation\_paths.png` — preview image.
+\- `procedural\_plant\_propagation\_paths.png` â€” preview image.
 
-\- `SHA256SUMS` — file-integrity checksums.
+\- `SHA256SUMS` â€” file-integrity checksums.
 
 
 
@@ -116,7 +116,7 @@ frame.
 
 The example illustrates how increasing vegetation geometry can obstruct the
 
-direct transmitter–receiver connection and alter the number, geometry, and
+direct transmitterâ€“receiver connection and alter the number, geometry, and
 
 strength of the returned propagation paths.
 
@@ -143,4 +143,5 @@ than estimated from the rendered path color or radius.
 \- Sionna RT 2.0.1
 
 \- Mitsuba 3.5.0
+
 
