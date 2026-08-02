@@ -150,3 +150,16 @@ Use the GitHub issue tracker for reproducible bug reports and feature requests.
 For publication-related questions, contact Felipe Oliveira Ribas at
 `felipe.oliveiraribas@ugent.be`.
 
+
+## Geometry Nodes visualization library
+
+SionnaRT-Bridge uses metric-specific Geometry Nodes groups to visualize
+propagation paths and radio-map results. The corresponding groups must exist
+in the Blender file and retain their exact datablock names.
+
+The reference Blender library is available at:
+
+`assets/blender/sionnart_geometry_nodes_1.0.0.blend`
+
+See [Geometry Nodes reference library](docs/geometry-nodes.md) for the
+included node groups and Blender append instructions.
