@@ -1,147 +1,73 @@
-﻿\# Procedural vegetation growth and propagation paths
-
-
+# Procedural vegetation growth and propagation paths
 
 This self-contained Blender example demonstrates how frame-dependent
-
 procedural vegetation affects Sionna RT propagation paths.
 
-
-
 The plant geometry changes over the Blender timeline. SionnaRT-Bridge
+evaluates the procedural geometry at each sampled frame, exports the evaluated
+scene state, runs the propagation simulation, and imports the resulting paths
+as attributed Blender geometry.
 
-evaluates the procedural geometry at each sampled frame, exports that
+![Procedural vegetation and propagation paths](procedural_plant_propagation_paths.png)
 
-evaluated scene state, runs the propagation simulation, and imports the
+## Included files
 
-resulting paths as attributed Blender geometry.
+- `sionnart_example_vegetation_procedural_scene.blend` - complete Blender
+  scene containing the procedural plant, transmitter, receiver, simulation
+  settings, imported path results, Geometry Nodes visualization, materials,
+  camera, and animation.
+- `procedural_plant_propagation_paths.png` - static preview image.
+- `SHA256SUMS` - SHA-256 checksums for the Blender scene and preview image.
 
+## Demonstrated features
 
+- Procedural scene geometry
+- Frame-dependent scene export
+- Transmitter and receiver placement
+- Propagation-path simulation
+- Line-of-sight and non-line-of-sight path changes
+- Path-interaction visualization
+- Geometry Nodes filtering and styling
+- Animation and parameter-sweep workflows
 
-!\[Procedural vegetation and propagation paths](procedural\_plant\_propagation\_paths.png)
+## Opening the example
 
+1. Install Blender 4.5 LTS.
+2. Install Mitsuba-Blender 4.5 Compatibility v0.4.8.
+3. Install SionnaRT-Bridge v1.0.0.
+4. Open `sionnart_example_vegetation_procedural_scene.blend`.
+5. Use the timeline to inspect the procedural plant growth.
+6. Inspect the propagation-path result object and its Geometry Nodes
+   modifier.
+7. Inspect the Sionna RT sidebar for the recorded simulation settings.
 
+## Re-running the simulation
 
-\## Included files
-
-
-
-\- `sionnart\_example\_vegetation\_procedural\_scene.blend` â€” complete Blender
-
-&#x20; scene containing the procedural plant, transmitter, receiver, simulation
-
-&#x20; settings, imported path results, Geometry Nodes visualization, materials,
-
-&#x20; camera, and animation.
-
-\- `procedural\_plant\_propagation\_paths.png` â€” preview image.
-
-\- `SHA256SUMS` â€” file-integrity checksums.
-
-
-
-\## Demonstrated features
-
-
-
-\- Procedural scene geometry
-
-\- Frame-dependent scene export
-
-\- Transmitter and receiver placement
-
-\- Propagation-path simulation
-
-\- Line-of-sight and non-line-of-sight path changes
-
-\- Path interaction visualization
-
-\- Geometry Nodes filtering and styling
-
-\- Animation and parameter-sweep workflows
-
-
-
-\## Opening the example
-
-
-
-1\. Install Blender 4.5 LTS.
-
-2\. Install Mitsuba-Blender 4.5 Compatibility v0.4.8.
-
-3\. Install SionnaRT-Bridge v1.0.0.
-
-4\. Open `sionnart\_example\_vegetation\_procedural\_scene.blend`.
-
-5\. Use the timeline to inspect the procedural plant growth.
-
-6\. Inspect the propagation-path result object and its Geometry Nodes
-
-&#x20;  modifier.
-
-7\. Inspect the Sionna RT sidebar for the recorded simulation settings.
-
-
-
-\## Re-running the simulation
-
-
-
-Configure a compatible external Python 3.11 environment containing
-
-Sionna RT 2.0.1 and Mitsuba 3.5.0.
-
-
+Configure a compatible external Python 3.11 environment containing Sionna RT
+2.0.1 and Mitsuba 3.5.0.
 
 The example used in the SoftwareX manuscript is configured at 26 GHz.
-
 Verify the frame range, solver settings, propagation mechanisms, antenna
-
 configuration, and random seed in the Blender scene before executing it.
 
-
-
 Run the propagation-path simulation over the configured frame range.
-
-Procedural geometry is evaluated and exported independently for each sampled
-
+Procedural geometry is evaluated and exported independently for every sampled
 frame.
 
-
-
-\## Interpretation
-
-
+## Interpretation
 
 The example illustrates how increasing vegetation geometry can obstruct the
-
-direct transmitterâ€“receiver connection and alter the number, geometry, and
-
+direct transmitter-receiver connection and alter the number, geometry, and
 strength of the returned propagation paths.
 
-
-
 Path-gain values should be read from the imported numerical attributes rather
-
 than estimated from the rendered path color or radius.
 
+## Software environment
 
-
-\## Software environment
-
-
-
-\- Blender 4.5 LTS
-
-\- SionnaRT-Bridge v1.0.0
-
-\- Mitsuba-Blender 4.5 Compatibility v0.4.8
-
-\- Python 3.11
-
-\- Sionna RT 2.0.1
-
-\- Mitsuba 3.5.0
-
-
+- Blender 4.5 LTS
+- SionnaRT-Bridge v1.0.0
+- Mitsuba-Blender 4.5 Compatibility v0.4.8
+- Python 3.11
+- Sionna RT 2.0.1
+- Mitsuba 3.5.0

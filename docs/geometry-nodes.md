@@ -1,4 +1,4 @@
-﻿# Geometry Nodes reference library
+# Geometry Nodes reference library
 
 SionnaRT-Bridge imports Sionna RT simulation results as attributed Blender
 geometry. Visualization is performed with user-editable Geometry Nodes groups.
