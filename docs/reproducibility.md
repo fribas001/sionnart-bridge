@@ -39,7 +39,7 @@ appending the node groups into another Blender scene.
 
 ## Numerical validation package
 
-Numerical validation is distributed separately under:
+Numerical validation will be distributed separately under:
 
 `validation/`
 
