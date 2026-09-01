@@ -1,14 +1,14 @@
 schema_version = "1.0.0"
 
 id = "sionnart_bridge"
-version = "1.0.0"
+version = "1.8.1"
 name = "SionnaRT-Bridge"
 tagline = "Run Sionna RT simulations and visualize results in Blender"
 maintainer = "Felipe Oliveira Ribas <felipe.oliveiraribas@ugent.be>"
 type = "add-on"
 website = "https://github.com/fribas001/sionnart-bridge"
 tags = ["3D View", "Import-Export", "Geometry Nodes"]
-blender_version_min = "4.5.0"
+blender_version_min = "5.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
 copyright = ["2026 Felipe Oliveira Ribas and contributors"]
 
@@ -19,8 +19,11 @@ files = "Export scenes and store simulation results"
 paths = [
   "__init__.py",
   "sionna_worker.py",
+  "integrated_mitsuba_exporter.py",
   "radio_map_worker.py",
   "radio_map_3d_worker.py",
-  "blender_manifest.toml",
+  "result_export_worker.py",
   "LICENSE",
+  "BLENDER_5_2_SETUP.md",
+  "assets/sionnart_geometry_nodes.blend",
 ]

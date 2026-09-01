@@ -17,7 +17,10 @@ from pathlib import Path
 
 import numpy as np
 
-BASE_COLUMNS = ("frame", "x", "y", "z", "cell_size_x", "cell_size_y", "cell_size_z", "associated_tx")
+BASE_COLUMNS = (
+    "frame", "x", "y", "z", "cell_size_x", "cell_size_y", "cell_size_z",
+    "associated_tx", "coverage_valid", "metric_norm",
+)
 METRIC_COLUMNS = {
     "path_gain": ("path_gain", "path_gain_db"),
     "rss": ("rss", "rss_dbm"),
@@ -364,6 +367,25 @@ def metric_db(values, metric):
     return clean, db
 
 
+def metric_volume_display_data(linear, db, association):
+    """Validity and normalized display values for a complete Z/Y/X volume."""
+    linear = np.asarray(linear, dtype=np.float64)
+    db = np.asarray(db, dtype=np.float64)
+    association = np.asarray(association, dtype=np.int32)
+    valid = (association >= 0) & np.isfinite(linear) & (linear > 0.0) & np.isfinite(db)
+    normalized = np.zeros(db.shape, dtype=np.float64)
+    valid_db = db[valid]
+    if valid_db.size:
+        lo = float(np.min(valid_db))
+        hi = float(np.max(valid_db))
+        span = hi - lo
+        if span > 1e-12:
+            normalized[valid] = np.clip((valid_db - lo) / span, 0.0, 1.0)
+        else:
+            normalized[valid] = 1.0
+    return valid.astype(np.int32), normalized.astype(np.float32)
+
+
 def tx_array_profile(config):
     antenna = config.get("antenna", {})
     return antenna.get("tx", antenna) or {
@@ -451,6 +473,7 @@ def build_layer_rows(frame, centers, values, association, metric, layer_z):
             f"TX-association grid mismatch: association={association.shape}, centers={centers.shape}"
         )
     linear, db = metric_db(values, metric)
+    valid, metric_norm = metric_volume_display_data(linear, db, association)
     linear_key, db_key = METRIC_COLUMNS[metric]
     volume = frame["radio_map_3d"]
     rows = []
@@ -466,6 +489,8 @@ def build_layer_rows(frame, centers, values, association, metric, layer_z):
                 "cell_size_y": float(volume["cell_size_y"]),
                 "cell_size_z": float(volume["cell_size_z"]),
                 "associated_tx": int(association[iy, ix]),
+                "coverage_valid": int(valid[iy, ix]),
+                "metric_norm": float(metric_norm[iy, ix]),
                 linear_key: float(linear[iy, ix]),
                 db_key: float(db[iy, ix]),
             })
@@ -518,6 +543,20 @@ def solve_frame(scene, solver, runtime, frame, status_path, frame_index, frame_c
     linear_key, db_key = METRIC_COLUMNS[metric]
     linear_layers = np.asarray(values_layers, dtype=np.float32)
     logarithmic_layers = np.asarray(db_layers, dtype=np.float32)
+    association_array = np.asarray(association_layers, dtype=np.int32)
+    coverage_valid, metric_norm = metric_volume_display_data(
+        linear_layers, logarithmic_layers, association_array
+    )
+    # Keep the flattened CSV representation numerically consistent with the
+    # canonical HDF5 volume: normalization is computed over the whole 3D
+    # volume, not independently per Z slice.
+    valid_flat = np.asarray(coverage_valid).reshape(-1)
+    norm_flat = np.asarray(metric_norm).reshape(-1)
+    if len(all_rows) == len(valid_flat):
+        for row, valid_value, norm_value in zip(all_rows, valid_flat, norm_flat):
+            row["coverage_valid"] = int(valid_value)
+            row["metric_norm"] = float(norm_value)
+
     if keep_external and output.get("results_npz"):
         archive = {
             "layer_heights": np.asarray(heights, dtype=np.float32),
@@ -529,7 +568,11 @@ def solve_frame(scene, solver, runtime, frame, status_path, frame_index, frame_c
             "values_db": logarithmic_layers,
             linear_key: linear_layers,
             db_key: logarithmic_layers,
-            "associated_tx": np.asarray(association_layers, dtype=np.int32),
+            "associated_tx": association_array,
+            "coverage_valid": np.asarray(coverage_valid, dtype=np.int32),
+            "metric_norm": np.asarray(metric_norm, dtype=np.float32),
+            "dimension_order": np.asarray("z,y,x"),
+            "grid_shape_zyx": np.asarray(linear_layers.shape, dtype=np.int32),
         }
         np.savez_compressed(output["results_npz"], **archive)
     frame_result = {
@@ -544,6 +587,14 @@ def solve_frame(scene, solver, runtime, frame, status_path, frame_index, frame_c
         "association_tx_names": list(scene.transmitters.keys()),
         "point_count": len(all_rows), "layer_count": len(heights),
         "layer_heights": [float(v) for v in heights],
+        "volume_shape_zyx": [int(v) for v in linear_layers.shape],
+        "dimension_order": "z,y,x",
+        "valid_voxel_count": int(np.count_nonzero(coverage_valid)),
+        "voxel_count": int(coverage_valid.size),
+        "coverage_fraction": (
+            float(np.count_nonzero(coverage_valid)) / float(coverage_valid.size)
+            if coverage_valid.size else 0.0
+        ),
         "results_json": output.get("results_json", ""), "results_npz": output.get("results_npz", ""),
     }
     if keep_external and output.get("results_json"):
@@ -617,12 +668,20 @@ def main(config_path):
     write_json(manifest_path, manifest)
     if Path(output["results_json"]) != manifest_path:
         write_json(output["results_json"], manifest)
+    from result_export_worker import export_completed_run
+    export_status = export_completed_run(
+        config_path=config_path,
+        manifest_path=manifest_path,
+        csv_path=combined_csv,
+        output=output,
+    )
     write_status_json(status_path, {
         "state": "finished", "updated_utc": now_utc(), "frame_count": len(frame_results),
         "completed_frames": len(frame_results), "point_count": len(all_rows), "metrics": metrics,
         "results_csv": str(combined_csv), "results_json": str(manifest_path), "frames": frame_results,
+        **export_status,
     })
-    print(json.dumps({"ok": True, "frame_count": len(frame_results), "point_count": len(all_rows), "metrics": metrics, "results_csv": str(combined_csv)}))
+    print(json.dumps({"ok": True, "frame_count": len(frame_results), "point_count": len(all_rows), "metrics": metrics, "results_csv": str(combined_csv), **export_status}))
     return 0
 
 
