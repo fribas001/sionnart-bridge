@@ -930,13 +930,21 @@ def main(config_path):
     write_json(manifest_path, manifest)
     if Path(output["results_json"]) != manifest_path:
         write_json(output["results_json"], manifest)
+    from result_export_worker import export_completed_run
+    export_status = export_completed_run(
+        config_path=config_path,
+        manifest_path=manifest_path,
+        csv_path=combined_csv,
+        output=output,
+    )
     write_status_json(status_path, {
         "state": "finished", "updated_utc": now_utc(), "frame_count": len(frame_results),
         "completed_frames": len(frame_results), "point_count": len(all_rows), "metrics": metrics,
         **combined_stats,
         "results_csv": str(combined_csv), "results_json": str(manifest_path), "frames": frame_results,
+        **export_status,
     })
-    print(json.dumps({"ok": True, "frame_count": len(frame_results), "point_count": len(all_rows), "metrics": metrics, "results_csv": str(combined_csv)}))
+    print(json.dumps({"ok": True, "frame_count": len(frame_results), "point_count": len(all_rows), "metrics": metrics, "results_csv": str(combined_csv), **export_status}))
     return 0
 
 

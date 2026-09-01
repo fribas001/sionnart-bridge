@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-External Sionna RT worker for the Blender SionnaRT-Bridge.
+Sionna RT propagation-path worker for the Blender SionnaRT-Bridge.
 
-This file must be executed by the Python interpreter belonging to the Sionna
-environment, not Blender's bundled Python.
+Blender 5.2 mode executes this file with Blender's bundled Python and exposes
+the configured Sionna site-packages through PYTHONPATH. Legacy external-Python
+mode is still supported.
 
 Version 0.7 also derives Blender TX/RX velocities, assigns them to Sionna radio
 devices, and embeds path-wise Doppler shifts and mobility attributes. The Sionna
@@ -1330,6 +1331,14 @@ def main(config_path):
     }
     write_json(manifest_path, manifest_payload)
 
+    from result_export_worker import export_completed_run
+    export_status = export_completed_run(
+        config_path=config_path,
+        manifest_path=manifest_path,
+        csv_path=combined_csv_path,
+        output=output,
+    )
+
     write_status_json(status_path, {
         "state": "finished",
         "updated_utc": now_utc(),
@@ -1339,6 +1348,7 @@ def main(config_path):
         "results_csv": str(combined_csv_path),
         "point_count": len(all_point_rows),
         "frames": frame_results,
+        **export_status,
     })
 
     print(json.dumps({
@@ -1346,6 +1356,7 @@ def main(config_path):
         "frame_count": len(frame_results),
         "frames_manifest_json": str(manifest_path),
         "last_results_csv": str(combined_csv_path),
+        **export_status,
     }))
     return 0
 

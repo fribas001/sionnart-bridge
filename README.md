@@ -22,11 +22,15 @@ The installable Blender extension is built from `src/sionnart_bridge/`.
 
 ## Requirements
 
-* Blender 4.5 LTS
-* Python 3.11 for the external simulation environment
-* Sionna RT 2.0.1
-* Mitsuba-Blender 4.5 Compatibility v0.4.8
-* CPU backend supported by Mitsuba/Dr.Jit, or a supported GPU backend
+Blender 5.2+
+Sionna RT 2.0.1
+Blender Python 3.13
+external Sionna site-packages
+integrated Mitsuba exporter
+HDF5 export
+Tile_spacial_dataset integration
+automatic bundled Geometry Nodes
+PointCloud TX/RX trajectories
 
 The exact tested dependency is maintained separately as **Mitsuba-Blender 4.5
 Compatibility v0.4.8** in the repository
