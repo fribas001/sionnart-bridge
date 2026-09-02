@@ -30,7 +30,7 @@ SPEED_OF_LIGHT_M_S = 299_792_458.0
 INVALID_SHAPE = 0xFFFFFFFF
 PATH_UID_STRIDE = 10_000_000
 
-# Blender 4.5's Import CSV node supports scalar integer and float columns only.
+# Blender Import CSV supports scalar integer and float columns only.
 # Coordinates therefore remain three scalar columns. Short x/y/z names replace
 # point_x/point_y/point_z from schema v1.
 GEOMETRY_NODES_CSV_COLUMNS = (

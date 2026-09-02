@@ -6042,7 +6042,7 @@ def _create_embedded_point_object(
     """Embed numeric rows as point-domain attributes in a Blender data object.
 
     The stored datablock is an efficient loose-vertex mesh for compatibility
-    across Blender 4.5 builds. The assigned Geometry Nodes group receives it
+    across supported Blender builds. The assigned Geometry Nodes group receives it
     through Group Input and immediately converts it to a native point-cloud
     component with Mesh to Points. External files can then be deleted safely.
     """

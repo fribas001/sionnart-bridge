@@ -6,7 +6,7 @@ Blender/Sionna world space in meters.
 
 ## Blender position limitation
 
-Blender 4.5 Import CSV supports only scalar integer and float columns and
+Blender 5.2 Import CSV supports only scalar integer and float columns and
 initializes native point positions to zero. It cannot parse a vector-valued CSV
 column into the built-in `position` field.
 

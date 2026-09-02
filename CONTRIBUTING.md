@@ -8,7 +8,7 @@ Contributions should be proposed through GitHub issues and pull requests.
 2. Keep user-visible names consistent with `SionnaRT-Bridge`.
 3. Update `CHANGELOG.md` for user-visible behavior changes.
 4. Run `pytest` and `python scripts/check_release.py`.
-5. Test the extension in Blender 4.5 LTS using **Install from Disk**.
+5. Test the extension in Blender 5.2 using **Install from Disk**.
 6. For solver changes, compare results with an equivalent native Sionna RT
    script and report numerical tolerances.
 
