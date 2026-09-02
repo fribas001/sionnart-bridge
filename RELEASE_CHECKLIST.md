@@ -102,18 +102,18 @@ If reported, record:
 - [x] `python scripts/check_release.py` passes
 - [x] `git diff --check` reports no errors
 - [ ] Repository-specific packaging checks pass
-- [ ] Working tree is clean before the final release commit
-- [ ] CI passes on the final release commit if CI is configured
+- [x] Working tree is clean after the final release-preparation commit
+- [x] CI passes on the final release commit if CI is configured
 
 ## Zenodo draft and DOI
 
 Use the manual Zenodo draft workflow described in `docs/release-and-archiving.md`.
 
 - [x] Create a Zenodo software draft for `SionnaRT-Bridge v1.8.2`
-- [ ] Confirm title, creators, affiliations, license, description, and keywords
+- [x] Confirm title, creators, affiliations, license, description, and keywords
 - [x] Reserve the version-specific DOI
 - [x] Record the reserved DOI in release-preparation notes
-- [ ] Do not publish the Zenodo draft yet
+- [x] Keep the Zenodo draft unpublished until the GitHub tag and release are final
 - [ ] Do not enable a duplicate automatic Zenodo GitHub archive for the same release unless intentionally creating a separate record
 
 ## Final version synchronization
@@ -141,33 +141,33 @@ Check at minimum:
 - [x] Run final smoke test using that exact ZIP
 - [x] Compute SHA-256 for `dist/sionnart_bridge-1.8.2.zip`
 - [x] Record the checksum
-- [ ] Do not rebuild the final ZIP without regenerating the checksum
+- [x] Do not rebuild the final ZIP without regenerating the checksum
 
 ## Git release
 
-- [ ] Create the final release-preparation commit
-- [ ] Record the final commit hash
-- [ ] Create annotated tag `v1.8.2`
-- [ ] Verify the tag points to the intended commit
-- [ ] Push the final branch
-- [ ] Push tag `v1.8.2`
-- [ ] Create GitHub release `SionnaRT-Bridge v1.8.2`
-- [ ] Attach `sionnart_bridge-1.8.2.zip`
-- [ ] Attach or publish the SHA-256 checksum
+- [x] Create the final release-preparation commit
+- [x] Record the final commit hash
+- [x] Create annotated tag `v1.8.2`
+- [x] Verify the tag points to the intended commit
+- [x] Push the final branch
+- [x] Push tag `v1.8.2`
+- [x] Create GitHub release `SionnaRT-Bridge v1.8.2`
+- [x] Attach `sionnart_bridge-1.8.2.zip`
+- [x] Attach or publish the SHA-256 checksum
 - [ ] Ensure release notes describe the supported environment and important limitations
 - [ ] Ensure release notes do not claim unavailable validation artifacts are included
 
 ## Zenodo publication
 
-- [ ] Upload the final immutable release artifact(s) to the existing Zenodo draft
-- [ ] Confirm uploaded files match the GitHub release
-- [ ] Confirm the reserved version DOI is unchanged
-- [ ] Confirm metadata version is `1.8.2`
+- [x] Upload the final immutable release artifact(s) to the existing Zenodo draft
+- [x] Confirm uploaded release ZIP matches the corresponding GitHub release asset
+- [x] Confirm the reserved version DOI is unchanged
+- [x] Confirm metadata version is `1.8.2`
 - [ ] Confirm repository and release links
-- [ ] Publish the Zenodo record
-- [ ] Verify that the DOI resolves
+- [x] Publish the Zenodo record
+- [x] Verify that the DOI resolves
 - [ ] Verify title, creators, license, version, and files after publication
-- [ ] Record the final version DOI
+- [x] Record the final version DOI
 - [ ] Record the concept DOI separately if useful
 
 ## Manuscript submission

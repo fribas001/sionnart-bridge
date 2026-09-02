@@ -1,11 +1,11 @@
 # SoftwareX code metadata values for v1.8.2
 
-Use these values for the SoftwareX code-metadata table once the final `v1.8.2` release and archival record are available.
+Use these values for the SoftwareX code-metadata table for the published `v1.8.2` release and archival record.
 
-> **Before submission:** confirm the GitHub release URL and verify that the reserved DOI resolves to the published v1.8.2 Zenodo record.
+> **Before submission:** verify that the GitHub release URL and version-specific DOI remain consistent with the published v1.8.2 Zenodo record.
 
 - **C1 — Current code version:** SionnaRT-Bridge v1.8.2
-- **C2 — Permanent link to code/repository:** GitHub `v1.8.2` release URL and, once published, the version-specific archival DOI
+- **C2 — Permanent link to code/repository:** GitHub `v1.8.2` release URL and the version-specific archival DOI
 - **C3 — Reproducible capsule / additional archive:** `N/A` if the manuscript examples are included in the tagged repository/release; otherwise provide the persistent identifier for any separately archived large reproducibility assets
 - **C4 — Legal code license:** GPL-3.0-or-later
 - **C5 — Code versioning system:** Git
@@ -16,17 +16,17 @@ Use these values for the SoftwareX code-metadata table once the final `v1.8.2` r
 
 ## Release and archive identifiers
 
-The DOI is reserved before tagging; confirm these identifiers after the GitHub release and Zenodo record are published:
+The v1.8.2 GitHub release and Zenodo archival record are published:
 
 ```text
 GitHub release:
 https://github.com/fribas001/sionnart-bridge/releases/tag/v1.8.2
 
 Version DOI:
-10.5281/zenodo.20125209 (reserved; Zenodo record not yet published)
+10.5281/zenodo.20125209
 
 Archive record:
-Zenodo DOI 10.5281/zenodo.20125209 (reserved; record pending publication)
+https://zenodo.org/records/20125209
 ```
 
 ## Consistency checks before submission
