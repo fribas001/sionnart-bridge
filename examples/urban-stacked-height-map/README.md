@@ -21,9 +21,9 @@ electromagnetic solver.
 
 ## Opening the example
 
-1. Install Blender 4.5 LTS.
-2. Install Mitsuba-Blender 4.5 Compatibility v0.4.8.
-3. Install SionnaRT-Bridge v1.0.0.
+1. Install Blender 5.2.
+2. Install SionnaRT-Bridge v1.8.2.
+3. Configure the external Sionna RT runtime as described in ../../docs/SIONNA_2_BLENDER_5_2_WINDOWS.md.
 4. Open `sionnart_example_city_scene.blend`.
 5. Use the timeline to inspect the animated coverage result.
 6. Inspect the Sionna RT sidebar for the recorded simulation settings.
@@ -51,12 +51,14 @@ the selected Mitsuba backend, GPU, driver, and hardware.
 
 ## Software environment
 
-- Blender 4.5 LTS
-- SionnaRT-Bridge v1.0.0
-- Mitsuba-Blender 4.5 Compatibility v0.4.8
-- Python 3.11
+- Blender 5.2
+- SionnaRT-Bridge v1.8.2
+- Blender Python 3.13
+- Sionna 2.0.1
 - Sionna RT 2.0.1
-- Mitsuba 3.5.0
+- Mitsuba 3.8.0
+- DrJit 1.3.1
+- h5py 3.16.0
 
 See `ATTRIBUTION.md` for information about the Munich scene and
 OpenStreetMap-derived data.

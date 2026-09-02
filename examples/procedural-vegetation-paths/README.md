@@ -32,9 +32,9 @@ as attributed Blender geometry.
 
 ## Opening the example
 
-1. Install Blender 4.5 LTS.
-2. Install Mitsuba-Blender 4.5 Compatibility v0.4.8.
-3. Install SionnaRT-Bridge v1.0.0.
+1. Install Blender 5.2.
+2. Install SionnaRT-Bridge v1.8.2.
+3. Configure the external Sionna RT runtime as described in ../../docs/SIONNA_2_BLENDER_5_2_WINDOWS.md.
 4. Open `sionnart_example_vegetation_procedural_scene.blend`.
 5. Use the timeline to inspect the procedural plant growth.
 6. Inspect the propagation-path result object and its Geometry Nodes
@@ -43,8 +43,10 @@ as attributed Blender geometry.
 
 ## Re-running the simulation
 
-Configure a compatible external Python 3.11 environment containing Sionna RT
-2.0.1 and Mitsuba 3.5.0.
+Configure a compatible external Sionna RT environment as described in
+../../docs/SIONNA_2_BLENDER_5_2_WINDOWS.md. The SoftwareX reference
+environment uses Sionna 2.0.1, Sionna RT 2.0.1, Mitsuba 3.8.0,
+DrJit 1.3.1, and h5py 3.16.0.
 
 The example used in the SoftwareX manuscript is configured at 26 GHz.
 Verify the frame range, solver settings, propagation mechanisms, antenna
@@ -65,9 +67,11 @@ than estimated from the rendered path color or radius.
 
 ## Software environment
 
-- Blender 4.5 LTS
-- SionnaRT-Bridge v1.0.0
-- Mitsuba-Blender 4.5 Compatibility v0.4.8
-- Python 3.11
+- Blender 5.2
+- Blender Python 3.13
+- SionnaRT-Bridge v1.8.2
+- Sionna 2.0.1
 - Sionna RT 2.0.1
-- Mitsuba 3.5.0
+- Mitsuba 3.8.0
+- DrJit 1.3.1
+- h5py 3.16.0
