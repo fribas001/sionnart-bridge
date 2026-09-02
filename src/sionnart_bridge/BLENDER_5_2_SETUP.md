@@ -1,5 +1,19 @@
 # SionnaRT-Bridge 1.8.0 — Blender 5.2 LTS
 
+## Sionna installation required
+
+SionnaRT-Bridge does not bundle NVIDIA Sionna.
+
+Sionna 2.0.1 must be installed separately before running simulations.
+
+The recommended Windows environment is:
+
+`C:\Users\<username>\blender52-sionna`
+
+For the complete installation procedure, see:
+
+`docs/SIONNA_2_BLENDER_5_2_WINDOWS.md`
+
 ## PointCloud motion: live frame-index follower
 
 PointCloud motion no longer bakes one keyframe per point and no longer uses a Copy Location constraint. At each Blender frame the add-on reads `point_index = frame - Start Frame`, evaluates that PointCloud point in world space, and places the chosen TX/RX directly at that world position. This keeps visible points and devices aligned and scales to very large PointCloud paths. The handler is registered only while at least one PointCloud path is connected and runs only when the Blender frame changes.

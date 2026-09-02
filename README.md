@@ -1,169 +1,730 @@
 # SionnaRT-Bridge
 
-**SionnaRT-Bridge** is a Blender 4.5 LTS add-on for configuring, executing,
-and analyzing Sionna RT radio-propagation simulations. Blender is used for
-scene authoring, procedural geometry, device placement, animation, and
-visualization. Numerical computations run in a separate Python environment
-with Sionna RT.
+**SionnaRT-Bridge** is a Blender 5.2+ extension for configuring, executing,
+exporting, and visualizing NVIDIA Sionna RT radio-propagation simulations.
 
-This repository is the publication-facing source tree for **version 1.0.0**.
-The installable Blender extension is built from `src/sionnart_bridge/`.
+Blender is used for scene authoring, procedural geometry, transmitter and
+receiver placement, animation, Geometry Nodes visualization, and interaction
+with the simulation workflow.
+
+Numerical radio-propagation computations are performed with **NVIDIA
+Sionna 2.0.1 / Sionna RT 2.0.1** through a dedicated Python environment that
+is compatible with Blender 5.2's Python runtime.
+
+The current extension version is **SionnaRT-Bridge 1.8.1**.
+
+The installable Blender extension is built from:
+
+```text
+src/sionnart_bridge/
+```
+
+---
 
 ## Main capabilities
 
-* Propagation-path simulations with attributed path geometry
-* Planar and projected-mesh radio maps
-* Stacked-height radio maps
-* Blender timeline and procedural-geometry parameter sweeps
-* Transmitter and receiver array/orientation configuration
-* Radio-material configuration
-* Scene caching, external worker monitoring, and retained numerical outputs
-* Path, coverage, mobility, and Doppler analytics
+- Sionna RT propagation-path simulations
+- Attributed propagation-path geometry in Blender
+- Planar 2D radio maps
+- Projected radio maps
+- 3D / stacked-height radio maps
+- Path gain, RSS, SINR, and related radio-map workflows
+- Blender timeline simulation sweeps
+- Procedural Geometry Nodes parameter sweeps
+- PointCloud-driven transmitter and receiver trajectories
+- Dynamic TX/RX movement support
+- Transmitter and receiver array configuration
+- Antenna orientation configuration
+- Sionna radio-material configuration
+- Integrated Mitsuba scene exporter
+- Scene caching and subprocess worker execution
+- CSV + metadata export
+- Structured HDF5 + metadata export
+- Frame-stacked 2D and 3D coverage tensors
+- `Tile_spacial_dataset` HDF5 integration
+- Spatial joins between coverage cells and tile information
+- Mobility and Doppler support
+- Automatic bundled Sionna Geometry Nodes
+- Headless Blender execution support
+
+---
 
 ## Requirements
 
-Blender 5.2+
-Sionna RT 2.0.1
-Blender Python 3.13
-external Sionna site-packages
-integrated Mitsuba exporter
-HDF5 export
-Tile_spacial_dataset integration
-automatic bundled Geometry Nodes
-PointCloud TX/RX trajectories
+The current tested configuration is:
 
-The exact tested dependency is maintained separately as **Mitsuba-Blender 4.5
-Compatibility v0.4.8** in the repository
-`fribas001/mitsuba-blender-4.5-compatibility`. Install its archived release and
-verify its SHA-256 before installing SionnaRT-Bridge.
+```text
+Operating system : Windows 11 x64
+Blender          : 5.2
+Blender Python   : 3.13.13
+Sionna           : 2.0.1
+Sionna RT        : 2.0.1
+Mitsuba          : 3.8.0
+DrJit            : 1.3.1
+h5py             : 3.16.0
+CUDA backend     : cuda_ad_mono_polarized
+```
 
-## Installation
+An NVIDIA GPU and compatible NVIDIA driver are recommended for CUDA-accelerated
+Sionna RT ray tracing.
 
-1. Download `sionnart_bridge-1.0.0.zip` from the GitHub release assets.
-2. In Blender, open **Edit → Preferences → Get Extensions → Install from Disk**
-and select the downloaded ZIP file.
-3. Create a Python 3.11 virtual environment for Sionna RT and install the
-external dependency:
+---
 
-```bash
-   python3.11 -m venv .venv-sionna
-   source .venv-sionna/bin/activate   # Windows PowerShell: .\.venv-sionna\Scripts\Activate.ps1
-   python -m pip install --upgrade pip
-   python -m pip install -r requirements-external.txt
-   ```
+## Important: Sionna 2.0.1 must be installed separately
 
-4. In Blender, open the **Sionna RT** sidebar, set the external Python
-executable and workspace, and run **Test Environment**.
+SionnaRT-Bridge does **not** bundle NVIDIA Sionna.
 
-See [docs/installation.md](docs/installation.md) for the complete procedure.
+Installing the Blender extension by itself is therefore **not enough to run
+Sionna RT simulations**.
+
+Before running simulations, install **Sionna 2.0.1** in a dedicated Python
+environment created with Blender 5.2's own Python interpreter.
+
+For Windows, the recommended environment is:
+
+```text
+C:\Users\<username>\blender52-sionna
+```
+
+SionnaRT-Bridge is designed to detect the corresponding Python packages at:
+
+```text
+C:\Users\<username>\blender52-sionna\Lib\site-packages
+```
+
+The complete installation procedure is available here:
+
+**[Install Sionna 2.0.1 for Blender 5.2 on Windows](docs/SIONNA_2_BLENDER_5_2_WINDOWS.md)**
+
+---
+
+## Quick Sionna 2.0.1 installation on Windows
+
+Open Windows PowerShell.
+
+First locate Blender 5.2's Python interpreter:
+
+```powershell
+$BlenderPython = "C:\Program Files\Blender Foundation\Blender 5.2\5.2\python\bin\python.exe"
+
+& $BlenderPython --version
+```
+
+A Blender 5.2 installation should report Python 3.13.x. The tested
+configuration uses:
+
+```text
+Python 3.13.13
+```
+
+Create the dedicated environment:
+
+```powershell
+& $BlenderPython -m venv "$HOME\blender52-sionna"
+```
+
+Upgrade pip and the Python packaging tools:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -m pip install --upgrade pip setuptools wheel
+```
+
+Install Sionna 2.0.1:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -m pip install "sionna==2.0.1"
+```
+
+Install HDF5 support:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -m pip install h5py
+```
+
+Verify Sionna:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -c "import sionna; print('Sionna:', sionna.__version__)"
+```
+
+Expected:
+
+```text
+Sionna: 2.0.1
+```
+
+Verify Sionna RT:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -c "import sionna.rt; print('Sionna RT import: OK')"
+```
+
+Expected:
+
+```text
+Sionna RT import: OK
+```
+
+Verify Mitsuba and DrJit:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -c "import mitsuba as mi, drjit as dr; print('Mitsuba:', mi.__version__); print('DrJit:', dr.__version__)"
+```
+
+The tested configuration reports:
+
+```text
+Mitsuba: 3.8.0
+DrJit: 1.3.1
+```
+
+Check available Mitsuba variants:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -c "import mitsuba as mi; print(mi.variants())"
+```
+
+On a compatible NVIDIA system, the output should include CUDA variants such
+as:
+
+```text
+cuda_ad_rgb
+cuda_ad_mono
+cuda_ad_mono_polarized
+cuda_ad_spectral
+cuda_ad_spectral_polarized
+```
+
+Test the CUDA backend used by the verified SionnaRT-Bridge configuration:
+
+```powershell
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -c "import mitsuba as mi; mi.set_variant('cuda_ad_mono_polarized'); print('Mitsuba variant:', mi.variant())"
+```
+
+Expected on a compatible NVIDIA system:
+
+```text
+Mitsuba variant: cuda_ad_mono_polarized
+```
+
+For more information and troubleshooting, see:
+
+**[Sionna 2.0.1 installation for Blender 5.2](docs/SIONNA_2_BLENDER_5_2_WINDOWS.md)**
+
+---
+
+## PyTorch CUDA note
+
+Sionna RT performs its ray tracing through **Mitsuba and DrJit**.
+
+For this reason:
+
+```python
+torch.cuda.is_available()
+```
+
+is not the definitive test of whether Sionna RT can use the GPU.
+
+A Python environment may report:
+
+```text
+False
+```
+
+for PyTorch CUDA while Mitsuba successfully uses:
+
+```text
+cuda_ad_mono_polarized
+```
+
+For SionnaRT-Bridge ray tracing, the important GPU test is whether the required
+Mitsuba CUDA variant can be selected successfully.
+
+---
+
+## Installation of SionnaRT-Bridge
+
+### 1. Install Sionna first
+
+Before installing or running the Blender extension, follow:
+
+**[Install Sionna 2.0.1 for Blender 5.2 on Windows](docs/SIONNA_2_BLENDER_5_2_WINDOWS.md)**
+
+### 2. Install the Blender extension
+
+Download the release ZIP:
+
+```text
+sionnart_bridge-1.8.1.zip
+```
+
+In Blender 5.2:
+
+1. Open **Edit → Preferences**
+2. Open **Get Extensions**
+3. Choose **Install from Disk**
+4. Select `sionnart_bridge-1.8.1.zip`
+5. Enable **SionnaRT-Bridge**
+
+The standard Blender 5.2 workflow automatically looks for the recommended
+environment:
+
+```text
+~/blender52-sionna
+```
+
+On Windows this normally resolves to:
+
+```text
+C:\Users\<username>\blender52-sionna
+```
+
+The packages are loaded from:
+
+```text
+C:\Users\<username>\blender52-sionna\Lib\site-packages
+```
+
+Sionna does not need to be copied into Blender's installation directory.
+
+---
+
+## Verify Sionna from inside Blender
+
+Open Blender's Python Console and run:
+
+```python
+import sys
+from pathlib import Path
+
+site_packages = (
+    Path.home()
+    / "blender52-sionna"
+    / "Lib"
+    / "site-packages"
+)
+
+if str(site_packages) not in sys.path:
+    sys.path.insert(0, str(site_packages))
+
+import sionna
+import sionna.rt
+import mitsuba as mi
+
+print("Sionna:", sionna.__version__)
+print("Mitsuba variants:", mi.variants())
+```
+
+To verify the tested CUDA backend:
+
+```python
+mi.set_variant("cuda_ad_mono_polarized")
+print("Mitsuba variant:", mi.variant())
+```
+
+Expected:
+
+```text
+Sionna: 2.0.1
+Mitsuba variant: cuda_ad_mono_polarized
+```
+
+---
 
 ## Quick start
 
-1. Use **Create / Repair Env** to create the controlled `sionna_env` hierarchy.
-2. Place simulation geometry under `sionna_env/scene`.
-3. Assign radio materials and create or mark transmitter and receiver objects.
-4. Configure the external environment, antenna arrays, solver settings, and
-desired output type.
-5. Run the simulation and inspect the imported attributed geometry.
+After Sionna and SionnaRT-Bridge are installed:
 
-Detailed attribute definitions are in [docs/output-schemas](docs/output-schemas/).
+1. Open Blender 5.2.
+2. Open the **Sionna RT** sidebar.
+3. Create or prepare the simulation environment.
+4. Place scene geometry under the Sionna scene hierarchy.
+5. Assign Sionna radio materials.
+6. Create or mark transmitter and receiver objects.
+7. Configure carrier frequency, arrays, solver settings, and propagation
+   mechanisms.
+8. Choose the desired simulation mode.
+9. Choose the desired export mode: no durable export, CSV + metadata, or
+   HDF5 + metadata.
+10. Run the simulation.
+11. Inspect propagation paths or radio maps through the bundled Geometry Nodes
+    visualization groups.
+
+---
+
+## Integrated Mitsuba exporter
+
+SionnaRT-Bridge 1.8.1 includes its own integrated Mitsuba scene exporter:
+
+```text
+src/sionnart_bridge/integrated_mitsuba_exporter.py
+```
+
+The legacy **Mitsuba-Blender 4.5 Compatibility** package is **not required**
+for the standard Blender 5.2 workflow.
+
+The integrated exporter converts the Blender simulation scene into the scene
+representation required by Sionna RT workers.
+
+---
+
+## Geometry Nodes visualization library
+
+SionnaRT-Bridge 1.8.1 bundles its Geometry Nodes library directly inside the
+extension:
+
+```text
+src/sionnart_bridge/assets/sionnart_geometry_nodes.blend
+```
+
+The extension automatically loads missing Sionna Geometry Nodes groups.
+
+The bundled library includes visualization groups for propagation paths and
+2D/3D radio maps.
+
+Current bundled groups include:
+
+```text
+Sionna_Paths
+Sionna_radio_map_pathgain_node
+Sionna_radio_map_projected_pathgain_node
+Sionna_radio_map_rss_node
+Sionna_radio_map_sinr_node
+Sionna_radio_map_3d_pathgain_node
+Sionna_radio_map_3d_rss_node
+Sionna_radio_map_3d_sinr_node
+```
+
+Existing node groups with the same name are preserved so that Blender does not
+create unnecessary `.001` duplicates.
+
+Manual appending of the standard Sionna visualization node groups is not
+normally required.
+
+---
+
+## PointCloud TX/RX trajectories
+
+SionnaRT-Bridge supports PointCloud-driven transmitter and receiver movement.
+
+When a PointCloud path is connected, the transmitter or receiver position is
+updated from the point corresponding to the current Blender frame.
+
+This allows trajectories generated by external or procedural spatial datasets
+to drive Sionna RT simulations directly from the Blender timeline.
+
+The Tile Dataset workflow can, for example, provide:
+
+```text
+Tile_TX_Path_Points
+```
+
+for transmitter sampling and motion.
+
+---
+
+## Tile spatial dataset integration
+
+SionnaRT-Bridge can integrate with a Blender PointCloud object named exactly:
+
+```text
+Tile_spacial_dataset
+```
+
+When HDF5 export is enabled and this object exists, its numeric attributes can
+be embedded into the simulation HDF5 output.
+
+The dataset is stored under:
+
+```text
+/spatial_datasets/Tile_spacial_dataset
+```
+
+Coverage maps can include a spatial join between coverage cells and tile
+indices.
+
+For 2D coverage this enables relationships between simulated radio coverage
+and tile-level information such as:
+
+```text
+building information
+statistical-sector information
+population information
+base-station information
+ROI / buffer classification
+other numeric tile attributes
+```
+
+The exact spelling `Tile_spacial_dataset` is retained for compatibility with
+the Tile Dataset Blender workflow.
+
+---
+
+## HDF5 result export
+
+SionnaRT-Bridge supports structured HDF5 export.
+
+Current HDF5 output supports simulation categories including:
+
+```text
+/simulations/paths
+/simulations/coverage_2d
+/simulations/coverage_3d
+```
+
+For compatible regular radio-map grids, coverage values are stored as dense
+time-series tensors.
+
+Typical 2D coverage layout:
+
+```text
+[frame, y, x]
+```
+
+Typical 3D coverage layout:
+
+```text
+[frame, z, y, x]
+```
+
+The HDF5 output also stores metadata describing dimensions, simulation
+configuration, source datasets, and available spatial joins.
+
+---
+
+## Dynamic simulations
+
+The extension supports dynamic transmitter and receiver workflows.
+
+When Dynamic Mode and trajectory controls are used, Blender frame changes can
+drive TX/RX positions before Sionna RT simulations are launched.
+
+This enables frame-by-frame radio-propagation studies for mobility,
+trajectory sampling, UAV studies, and other dynamic network scenarios.
+
+---
+
+## Headless Blender execution
+
+SionnaRT-Bridge can also be used with Blender in background/headless mode.
+
+A typical Blender command follows the form:
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" `
+    -b "project.blend" `
+    -P "run_sionna_headless.py"
+```
+
+Scripts using Blender's `bpy` API must be executed by Blender's Python runtime,
+not by a normal standalone Python interpreter.
+
+---
 
 ## Build the Blender extension
 
-Using Blender 4.5 LTS:
+The extension source is located at:
 
-```bash
-blender --command extension validate --source-dir src/sionnart_bridge
-blender --command extension build \
-  --source-dir src/sionnart_bridge \
-  --output-dir dist
+```text
+src/sionnart_bridge
 ```
 
-A Python-only deterministic build helper is also provided:
+Using Blender 5.2 on Windows, validate the extension with:
 
-```bash
-python scripts/build_extension.py
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" `
+    --command extension validate `
+    ".\src\sionnart_bridge"
 ```
 
-The expected release asset is `dist/sionnart_bridge-1.0.0.zip`.
+A successful validation reports:
+
+```text
+Success parsing TOML in ".\src\sionnart_bridge"
+```
+
+Build the extension with:
+
+```powershell
+New-Item -ItemType Directory -Force ".\dist" | Out-Null
+
+& "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" `
+    --command extension build `
+    --source-dir ".\src\sionnart_bridge" `
+    --output-dir ".\dist"
+```
+
+The expected release asset for version 1.8.1 is:
+
+```text
+dist\sionnart_bridge-1.8.1.zip
+```
+
+The extension manifest is:
+
+```text
+src\sionnart_bridge\blender_manifest.toml
+```
+
+and currently declares:
+
+```text
+version = "1.8.1"
+blender_version_min = "5.2.0"
+```
+
+---
 
 ## Tests
 
-The repository includes source/metadata tests that can run without Blender:
+The repository includes source and metadata tests that can run without a full
+interactive Blender session.
+
+Install development requirements as documented by the repository and run:
 
 ```bash
-python -m pip install -r requirements-dev.txt
 pytest
-python scripts/check_release.py
 ```
 
-Full scientific validation requires Blender 4.5 LTS, the exact Mitsuba export
-component, and Sionna RT. The validation protocol is described in
-[docs/validation.md](docs/validation.md).
+Scientific validation should additionally verify the complete Blender,
+Sionna RT, Mitsuba, DrJit, GPU, scene-export, and result-export workflow.
 
-## Reproducibility and examples
+See:
 
-Publication example scenes, configurations, expected numerical outputs, and
-hardware/runtime metadata must be placed under `examples/` before the archival
-v1.0.0 release. See [examples/README.md](examples/README.md) and
-[docs/reproducibility.md](docs/reproducibility.md).
+[Validation protocol](docs/validation.md)
+
+---
+
+## Reproducibility
+
+For reproducible simulation studies, record at minimum:
+
+```text
+SionnaRT-Bridge version
+Blender version
+Blender Python version
+Sionna version
+Sionna RT version
+Mitsuba version
+DrJit version
+GPU model
+NVIDIA driver
+Mitsuba execution variant
+carrier frequency
+TX power
+antenna configuration
+solver settings
+propagation mechanisms
+random seed
+simulation scene
+simulation frame / trajectory state
+```
+
+For the currently tested SionnaRT-Bridge 1.8.1 environment:
+
+```text
+Blender          5.2
+Python           3.13.13
+Sionna           2.0.1
+Sionna RT        2.0.1
+Mitsuba          3.8.0
+DrJit            1.3.1
+Mitsuba backend  cuda_ad_mono_polarized
+```
+
+See:
+
+[Reproducibility documentation](docs/reproducibility.md)
+
+---
 
 ## Documentation
 
-* [Installation](docs/installation.md)
-* [Reproducibility](docs/reproducibility.md)
-* [Validation protocol](docs/validation.md)
-* [Antenna naming](docs/antenna-naming.md)
-* [Radio materials](docs/radio-materials.md)
-* [Output schemas](docs/output-schemas/)
-* [Release and Zenodo archiving](docs/release-and-archiving.md)
-* [Third-party software and citations](THIRD_PARTY_SOFTWARE.md)
+- [Sionna 2.0.1 installation for Blender 5.2 on Windows](docs/SIONNA_2_BLENDER_5_2_WINDOWS.md)
+- [Installation](docs/installation.md)
+- [Reproducibility](docs/reproducibility.md)
+- [Validation protocol](docs/validation.md)
+- [Antenna naming](docs/antenna-naming.md)
+- [Radio materials](docs/radio-materials.md)
+- [Output schemas](docs/output-schemas/)
+- [Geometry Nodes](docs/geometry-nodes.md)
+- [Release and Zenodo archiving](docs/release-and-archiving.md)
+- [Third-party software and citations](THIRD_PARTY_SOFTWARE.md)
+
+---
 
 ## Citation
 
-Citation metadata are provided in [`CITATION.cff`](CITATION.cff). After the
-v1.0.0 GitHub release is archived in Zenodo, add the version DOI to both
-`CITATION.cff` and the SoftwareX manuscript.
+Citation metadata are provided in:
 
+[`CITATION.cff`](CITATION.cff)
 
+If a DOI is assigned through Zenodo or another archive, cite the archived
+release corresponding to the exact SionnaRT-Bridge version used in the
+simulation study.
+
+---
 
 ## Third-party software and citations
 
 SionnaRT-Bridge depends on separately distributed scientific software,
-including Sionna RT, Mitsuba 3, Dr.Jit, Blender, and Mitsuba-Blender 4.5
-Compatibility.
+including:
 
-Their tested versions, licenses, upstream repositories, provenance, and
-citation guidance are documented in
-[THIRD_PARTY_SOFTWARE.md](THIRD_PARTY_SOFTWARE.md).
+```text
+Blender
+NVIDIA Sionna
+Sionna RT
+Mitsuba
+DrJit
+PyTorch
+NumPy
+h5py
+```
 
+These projects remain separate dependencies and are distributed according to
+their respective licenses.
 
+See:
+
+[THIRD_PARTY_SOFTWARE.md](THIRD_PARTY_SOFTWARE.md)
+
+for dependency, provenance, licensing, and citation information.
+
+---
 
 ## License
 
 SionnaRT-Bridge is distributed under the GNU General Public License,
-version 3 or later (`GPL-3.0-or-later`). See [LICENSE](LICENSE).
+version 3 or later:
 
-Sionna RT and Mitsuba are separate dependencies distributed under their own
-licenses. Mitsuba-Blender 4.5 Compatibility is a separate BSD-3-Clause downstream
-component with its own provenance, release archive, and citation metadata.
+```text
+GPL-3.0-or-later
+```
+
+See:
+
+[LICENSE](LICENSE)
+
+Sionna, Sionna RT, Mitsuba, DrJit, Blender, PyTorch, and other dependencies
+are separate software projects distributed under their own licenses.
+
+---
 
 ## Support
 
 Use the GitHub issue tracker for reproducible bug reports and feature requests.
-For publication-related questions, contact Felipe Oliveira Ribas at
-`felipe.oliveiraribas@ugent.be`.
 
+For publication-related questions, contact:
 
-## Geometry Nodes visualization library
-
-SionnaRT-Bridge uses metric-specific Geometry Nodes groups to visualize
-propagation paths and radio-map results. The corresponding groups must exist
-in the Blender file and retain their exact datablock names.
-
-The reference Blender library is available at:
-
-`assets/blender/sionnart_geometry_nodes_1.0.0.blend`
-
-See [Geometry Nodes reference library](docs/geometry-nodes.md) for the
-included node groups and Blender append instructions.
+```text
+Felipe Oliveira Ribas
+felipe.oliveiraribas@ugent.be
+```

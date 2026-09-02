@@ -6,6 +6,13 @@ The project uses semantic versioning for publication releases.
 
 ## 1.8.1 - 2026-09-01
 
+### Documentation
+
+- Added step-by-step installation instructions for Sionna 2.0.1 with Blender 5.2.
+- Documented the dedicated `blender52-sionna` environment.
+- Added Sionna RT, Mitsuba, DrJit and CUDA verification commands.
+- Clarified that Sionna is required separately and is not bundled with the extension.
+
 ### Added
 - Blender 5.2 and Python 3.13 workflow.
 - Integrated Mitsuba scene exporter.
