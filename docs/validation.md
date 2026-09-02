@@ -1,97 +1,95 @@
-# Validation and performance protocol
+# Validation
 
-This document defines the minimum scientific and performance evidence required
-for the SoftwareX v1.0.0 release.
+This document describes the validation approach used for SionnaRT-Bridge and the checks recommended when reproducing or extending the SoftwareX results.
 
-It is a protocol, not a claim that the current development version has already
-passed every listed test. Completed results must be recorded in the
-machine-readable validation package before the final release is tagged.
+It distinguishes between:
 
-## Numerical equivalence
+- **scientific validation** of numerical results against direct Sionna RT workflows;
+- **software tests** that verify implementation behavior and packaging;
+- **workflow checks** that verify results are transferred into Blender without unintended modification.
 
-Run identical scenes and simulation settings through:
+> **Scope:** The repository documents the validation method and includes the example scenes used to exercise the workflow. It does not currently distribute the complete raw 70-frame comparison dataset or a standalone machine-readable validation package.
 
-1. a direct Sionna RT reference script; and
+---
+
+## Scientific validation principle
+
+SionnaRT-Bridge is a workflow and integration layer around Sionna RT.
+
+The central validation question is therefore:
+
+> Does the bridge reproduce the same Sionna RT result as an equivalent direct Sionna RT workflow when geometry, devices, antenna configuration, radio materials, propagation mechanisms, and solver settings are held constant?
+
+The bridge should not be expected to produce a different physical solution from direct Sionna RT when both workflows use the same numerical configuration.
+
+---
+
+## Propagation-path comparison
+
+For a numerical equivalence study, run equivalent scenes and solver settings through:
+
+1. a direct Sionna RT reference workflow; and
 2. SionnaRT-Bridge.
 
-Use identical scene geometry, transmitter and receiver configurations,
-frequencies, antenna arrays, solver settings, propagation mechanisms, random
-seeds, and numerical backends.
+Compare, where applicable:
 
-### Propagation paths
-
-Compare:
-
-- path count for every transmitter-receiver link;
-- transmitter and receiver identifiers;
+- number of returned paths;
+- transmitter and receiver indices;
+- interaction-type sequence;
 - ordered interaction coordinates;
-- interaction-object identifiers;
-- path delays;
-- complex path coefficients;
-- path gains;
-- line-of-sight and interaction-type classifications.
+- path gain;
+- propagation delay.
 
-Report the maximum absolute and relative differences and the tolerance used
-for every quantity.
+Corresponding paths should be matched using stable identifiers derived from the TX/RX pair and the ordered propagation interactions rather than relying only on output row order.
 
-### Planar radio maps
+---
 
-Compare:
+## SoftwareX propagation-path validation
 
-- cell-center coordinates;
-- path-gain values;
-- transmitter association;
-- invalid or masked cells;
-- grid dimensions and cell spacing.
+The SoftwareX manuscript reports a 70-frame procedural-vegetation comparison between the automated bridge workflow and an independently prepared direct Sionna RT reference workflow.
 
-Report RMSE, maximum absolute difference, transmitter-association agreement,
-and the number of compared cells.
+The reported comparison uses the following absolute tolerances:
 
-### Projected radio maps
+| Quantity | Absolute tolerance |
+|---|---:|
+| Interaction coordinates | 0.01 m |
+| Path gain | 0.002 dB |
+| Propagation delay | 0.2 ns |
 
-Compare:
+The manuscript reports an overall agreement of **99.9%**, calculated from the category-level agreement percentages used in that study.
 
-- projected cell-center coordinates;
-- surface normals;
-- cell areas;
-- path-gain values;
-- transmitter association;
-- source-map indices.
+The complete raw 70-frame comparison files are not required for normal installation or use of SionnaRT-Bridge and are not currently included in this Git repository.
 
-### Stacked-height radio maps
+The procedural vegetation example scene is available under:
 
-Compare:
+```text
+examples/procedural-vegetation-paths/
+```
 
-- number of layers;
-- layer-center positions;
-- horizontal cell centers;
-- path-gain values;
-- transmitter association;
-- imported Blender attribute values.
+---
 
-## Coordinate transfer
+## Interpreting numerical differences
 
-Use a compact synthetic scene with known transforms to test:
+Small floating-point differences may occur between runs because of:
 
-- object translation;
-- object rotation;
-- parent transforms;
-- uniform and nonuniform scaling;
-- evaluated modifiers;
-- evaluated Geometry Nodes geometry;
-- transmitter and receiver orientation modes;
-- exported and re-imported world-space coordinates.
+- GPU-parallel execution;
+- driver changes;
+- backend changes;
+- dependency-version changes;
+- hardware differences;
+- stochastic solver operations.
 
-For every case, retain the expected coordinates, bridge-produced coordinates,
-absolute difference, tolerance, and pass/fail status.
+For this reason, scientific comparisons should use documented numerical tolerances rather than requiring byte-for-byte identical result files.
+
+A fixed solver seed should be used when repeatability is important.
+
+---
 
 ## External-file-to-Blender agreement
 
-Verify that numerical values written by the external worker are imported into
-Blender without unintended changes.
+Numerical values written by the external worker should be imported into Blender without unintended changes.
 
-Compare the retained result files against the corresponding Blender geometry
-attributes for:
+When validating the import layer, compare retained result files against the corresponding Blender geometry attributes for applicable quantities such as:
 
 - coordinates;
 - delays;
@@ -102,9 +100,139 @@ attributes for:
 - transmitter association;
 - stacked-height layer indices.
 
+This check validates data transport and reconstruction inside Blender rather than the Sionna RT solver itself.
+
+---
+
+## Result serialization checks
+
+For CSV or HDF5 output, verify that:
+
+- frame indices are preserved;
+- TX/RX indices are preserved;
+- path identifiers remain stable within the documented schema;
+- units match the output-schema documentation;
+- missing or invalid values are represented consistently;
+- multidimensional radio-map ordering matches the documented dimensions.
+
+See:
+
+```text
+docs/output-schemas/
+```
+
+---
+
+## Radio-map validation
+
+For planar radio maps, comparisons may include:
+
+- grid dimensions;
+- cell-center coordinates;
+- path gain;
+- RSS;
+- SINR;
+- transmitter association.
+
+When comparing numerical radio-map values, report both an aggregate error measure and the maximum absolute difference.
+
+Examples of useful measures include:
+
+- RMSE;
+- mean absolute error;
+- maximum absolute difference.
+
+The comparison should use identical:
+
+- map center;
+- map extent;
+- cell size;
+- measurement height;
+- transmit powers;
+- bandwidth and temperature for SINR;
+- radio materials;
+- solver settings.
+
+---
+
+## Projected-mesh radio-map validation
+
+For Projected Mesh mode, verify:
+
+- the same evaluated reference mesh is used;
+- degenerate triangles are handled consistently;
+- triangle ordering is stable or explicitly matched;
+- returned values are associated with the correct measurement triangles.
+
+The current projected-mesh workflow should be validated using the metric supported by the implementation.
+
+---
+
+## Stacked-height convention
+
+The implementation and SoftwareX manuscript use the requested vertical spacing `cell_size_z` directly.
+
+The requested vertical extent determines the number of sampled layers.
+
+Adjacent layer centers remain separated by `cell_size_z`.
+
+The final layer may therefore extend beyond the nominal upper boundary when the requested vertical extent is not an exact multiple of the requested spacing.
+
+The following must remain consistent with this convention:
+
+- implementation;
+- user-interface wording;
+- output schema;
+- examples;
+- manuscript description.
+
+A stacked-height radio map is a set of planar Sionna RT evaluations at multiple heights. It is not a separate volumetric electromagnetic solver.
+
+---
+
+## Procedural-geometry validation
+
+For procedural or Geometry Nodes scenes, verify that the geometry used by the worker is the evaluated Blender geometry for the intended frame.
+
+Useful checks include:
+
+- object count;
+- vertex count;
+- triangle count;
+- evaluated bounding box;
+- material assignment;
+- frame number;
+- procedural random seed;
+- exported-scene checksum where practical.
+
+Representative frames should be inspected manually before launching a large sweep.
+
+If incompatible frames are skipped, the skipped-frame report must be retained and reviewed.
+
+---
+
+## Timeline and parameter-sweep validation
+
+When Blender frames represent a scientific parameter rather than animation time, document the mapping explicitly.
+
+Examples:
+
+```text
+frame -> transmitter power
+frame -> UAV altitude
+frame -> vegetation state
+frame -> device position
+```
+
+Validation should confirm that the intended parameter value is applied before each frame is exported and simulated.
+
+---
+
 ## Performance measurements
 
-Measure the following stages separately:
+Performance measurements are useful for characterizing workflow overhead, but they should be reported separately from numerical-equivalence validation.
+
+Possible stages include:
 
 - evaluated-scene preparation;
 - scene export;
@@ -114,83 +242,113 @@ Measure the following stages separately:
 - result serialization;
 - Blender result import;
 - Geometry Nodes visualization preparation;
-- total bridge workflow time.
+- total workflow time.
 
-For every benchmark, report:
+For reproducible benchmarks, record:
 
-- scene name and checksum;
+- scene;
 - scene size;
-- transmitter and receiver count;
-- path count or radio-map cell count;
-- peak memory use where available;
+- TX/RX count;
+- path or radio-map sample count;
 - operating system;
 - CPU;
 - GPU and driver;
-- selected Mitsuba or Dr.Jit backend;
-- warm-up-run count;
-- measured-run count;
-- mean, standard deviation, minimum, and maximum runtime.
+- Mitsuba / DrJit backend;
+- warm-up count;
+- measured-run count.
 
-## Stacked-height convention
+Do not present performance numbers from different hardware or solver configurations as directly comparable without qualification.
 
-The implementation and SoftwareX manuscript use the requested vertical spacing
-`cell_size_z` directly.
+---
 
-The requested vertical extent determines the number of sampled layers.
-Adjacent layer centers remain separated by `cell_size_z`. The final layer may
-therefore extend beyond the nominal upper boundary when the requested extent
-is not an exact multiple of the spacing.
+## Automated tests
 
-The implementation, user-interface label, output schema, validation results,
-and manuscript must retain this same convention.
+Automated repository tests serve a different purpose from scientific validation.
 
-## Validation package
+They may verify items such as:
 
-Completed evidence must be stored under:
+- Python helper behavior;
+- path-gain conversions;
+- array handling;
+- output serialization;
+- manifest validity;
+- packaging;
+- syntax and import behavior.
 
-`validation/`
+Passing automated tests does not by itself establish scientific equivalence with a direct Sionna RT workflow.
 
-The final v1.0.0 repository should contain:
+Likewise, a scientific comparison does not replace normal software testing.
 
-- `validation/README.md`
-- `validation/results-v1.0.0.csv`
-- `validation/environment-v1.0.0.json`
-- `validation/SHA256SUMS`
+---
 
-Additional per-case numerical files may be stored under:
+## Environment reporting
 
-`validation/cases/`
+A reproducible validation report should record the exact environment used.
 
-The CSV summary must contain, at minimum:
+For the SoftwareX submission environment, record at least:
 
-- validation-case identifier;
-- compared quantity;
-- reference value;
-- bridge value;
-- absolute error;
-- relative error;
-- tolerance;
-- pass/fail status.
+```text
+SionnaRT-Bridge version
+Git commit
+Blender version
+Blender Python version
+Sionna version
+Sionna RT version
+Mitsuba version
+DrJit version
+h5py version
+operating system
+CPU
+GPU
+GPU driver
+execution backend
+solver seed
+```
 
-The environment JSON must record the exact software versions, hardware,
-backend, Git commit, random seed, solver configuration, and measurement
-procedure.
+Do not infer exact environment versions from documentation when the validation machine can report them directly.
 
-The SHA-256 file must cover every machine-readable validation artifact used to
-produce the SoftwareX manuscript results.
+See also:
 
-## Manuscript reporting
+```text
+docs/reproducibility.md
+```
 
-The SoftwareX manuscript must report a concise summary of:
+---
 
-- path-count agreement;
-- maximum coordinate difference;
-- maximum delay difference;
-- maximum path-gain difference;
-- radio-map RMSE and maximum absolute difference;
-- transmitter-association agreement;
-- external-file-to-Blender agreement;
-- export, import, and total bridge overhead.
+## Current repository scope
 
-The complete machine-readable evidence remains in the versioned repository and
-DOI-backed release archive.
+This repository contains:
+
+- the SionnaRT-Bridge source code;
+- installation documentation;
+- user documentation;
+- output-schema documentation;
+- example Blender scenes;
+- automated tests;
+- the validation methodology described here.
+
+The repository does **not** currently claim to include:
+
+- the complete raw 70-frame reference dataset;
+- the complete raw 70-frame bridge-result dataset;
+- a dedicated `validation/` result archive;
+- a machine-readable table containing every comparison used to obtain the manuscript's reported 99.9% value.
+
+If those artifacts are archived separately in the future, the corresponding persistent identifier and checksum should be added to the release documentation.
+
+---
+
+## Manuscript consistency
+
+Before creating a publication release, check that the repository and manuscript agree on:
+
+- SionnaRT-Bridge version;
+- Blender version;
+- Sionna / Sionna RT versions;
+- example-scene descriptions;
+- propagation-path comparison tolerances;
+- stacked-height convention;
+- supported output formats;
+- stated software scope and limitations.
+
+Repository documentation should not claim that validation artifacts are distributed unless those artifacts are actually present in the tagged release.
