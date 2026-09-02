@@ -9,4 +9,4 @@
   funding acquisition, and review
 
 Final CRediT roles, ORCIDs, institutional copyright ownership, and contributor
-acknowledgements must be confirmed before the v1.0.0 archival release.
+acknowledgements must be confirmed before publication and archival release.

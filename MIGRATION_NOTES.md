@@ -11,13 +11,13 @@ a full GPL license text, or an archival release workflow.
 This repository scaffold preserves the four runtime Python modules while:
 
 - standardizing the public name to `SionnaRT-Bridge`;
-- setting the semantic release version to `1.0.0`;
+- introducing semantic versioning for publication releases;
 - correcting the Blender manifest maintainer, website, package ID, permission
   text, and build paths;
 - replacing the short license notice with the full GPL-3.0 text;
 - separating user documentation, schemas, tests, examples, and release tools;
-- adding CITATION.cff, Zenodo metadata, GitHub CI, issue templates, and a
-  release checklist.
+- adding CITATION.cff, GitHub CI, issue templates, and a release checklist.
 
 No scientific solver result was generated or validated during this repository
-migration. The release remains a candidate until the checklist is complete.
+migration. This statement describes the migration step only; subsequent
+validation and release preparation are documented separately.
