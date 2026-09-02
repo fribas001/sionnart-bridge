@@ -1,15 +1,20 @@
-# Geometry Nodes reference library
+# Geometry Nodes
 
-SionnaRT-Bridge imports Sionna RT simulation results as attributed Blender
-geometry. Visualization is performed with user-editable Geometry Nodes groups.
+SionnaRT-Bridge ships its current Geometry Nodes library inside the Blender extension package.
 
-The reference library is available at:
+The bundled library is:
 
-`assets/blender/sionnart_geometry_nodes_1.0.0.blend`
+```text
+src/sionnart_bridge/assets/sionnart_geometry_nodes.blend
+```
 
-The groups must retain their exact Blender datablock names.
+The extension loads missing SionnaRT node groups automatically during extension registration and when another `.blend` file is opened. In the normal Blender 5.2 workflow, users do **not** need to append these node groups manually.
+
+The node groups must retain their exact Blender datablock names because the add-on looks them up by name.
 
 ## Included node groups
+
+The SionnaRT workflow uses node groups including:
 
 | Node group | Purpose |
 |---|---|
@@ -18,45 +23,90 @@ The groups must retain their exact Blender datablock names.
 | `Sionna_radio_map_rss_node` | Visualizes planar RSS radio maps. |
 | `Sionna_radio_map_sinr_node` | Visualizes planar SINR radio maps. |
 | `Sionna_radio_map_projected_pathgain_node` | Projects Path Gain values onto reference geometry. |
-| `Sionna_radio_map_3d_pathgain_node` | Visualizes three-dimensional Path Gain maps. |
-| `Sionna_radio_map_3d_rss_node` | Visualizes three-dimensional RSS maps. |
-| `Sionna_radio_map_3d_sinr_node` | Visualizes three-dimensional SINR maps. |
+| `Sionna_radio_map_3d_pathgain_node` | Visualizes stacked-height Path Gain maps. |
+| `Sionna_radio_map_3d_rss_node` | Visualizes stacked-height RSS maps. |
+| `Sionna_radio_map_3d_sinr_node` | Visualizes stacked-height SINR maps. |
 | `Sionna_device_text` | Creates optional camera-facing TX and RX labels. |
 
-## Append the node groups
+Do not rename these node groups. A copied name such as
+`Sionna_radio_map_3d_sinr_node.001` does not match the exact name expected by
+the add-on.
 
-1. Download `sionnart_geometry_nodes_1.0.0.blend`.
-2. In Blender 4.5 LTS, select **File → Append**.
-3. Open the downloaded `.blend` file.
-4. Open the **NodeTree** directory.
-5. Select the required node groups, or press `A` to select all.
-6. Select **Append**.
-7. Save the destination Blender file.
+## Automatic loading
 
-Do not rename the node groups. A copied name such as
-`Sionna_radio_map_3d_sinr_node.001` does not match the exact name expected
-by the add-on.
+When SionnaRT-Bridge is registered, it checks the bundled library for the
+required node groups and appends missing groups automatically.
 
-## Requirements
+The same recovery mechanism runs when a different Blender file is loaded, so
+projects do not need to carry a manually appended copy of every group in
+advance.
 
-- Blender 4.5 LTS
-- Exact node-group names
-- A `Geometry` input on result-visualization groups
-- Fake User enabled for reusable node groups
-- Required materials included in the reference library
-- No project-specific absolute paths or simulation outputs
+If a required group is missing from both the current Blender file and the
+bundled library, the add-on reports an error rather than silently substituting
+a differently named group.
 
-## Verify the downloaded file
+## Blender requirements
 
-A SHA-256 checksum is provided in:
+The SoftwareX release targets:
 
-`assets/blender/sionnart_geometry_nodes_1.0.0.blend.sha256`
+- Blender 5.2 or newer;
+- Blender Python 3.13 in the reference environment;
+- exact node-group datablock names;
+- a valid `Geometry` input on result-visualization groups where required.
 
-On Windows PowerShell:
+The extension manifest declares Blender 5.2.0 as the minimum supported Blender
+version.
+
+## Bundled versus legacy reference library
+
+The current extension library is:
+
+```text
+src/sionnart_bridge/assets/sionnart_geometry_nodes.blend
+```
+
+The repository also contains an older standalone reference asset:
+
+```text
+assets/blender/sionnart_geometry_nodes_1.0.0.blend
+```
+
+These files are not identical and should not be treated as interchangeable.
+
+The `1.0.0` filename identifies that legacy reference asset; it is **not** the
+current SionnaRT-Bridge release version. The current v1.8.2 extension uses the
+bundled unversioned library under `src/sionnart_bridge/assets/`.
+
+Unless reproducing an older workflow that explicitly depends on the legacy
+reference file, use the Geometry Nodes library bundled with the installed
+extension.
+
+## Verification
+
+To verify the current bundled library in a source checkout, run:
 
 ```powershell
 Get-FileHash `
-    .\sionnart_geometry_nodes_1.0.0.blend `
+    ".\src\sionnart_bridge\assets\sionnart_geometry_nodes.blend" `
     -Algorithm SHA256
-
 ```
+
+For a publication release, record the SHA-256 checksum from the exact final
+release commit rather than copying a checksum from an older reference asset.
+
+## Result data and Geometry Nodes
+
+SionnaRT-Bridge writes or imports numerical simulation results and assigns the
+corresponding Geometry Nodes group for visualization.
+
+Depending on the workflow, Geometry Nodes are used for:
+
+- propagation-path visualization;
+- planar radio maps;
+- projected radio maps;
+- stacked-height radio maps;
+- metric filtering and styling;
+- optional transmitter and receiver labels.
+
+Geometry Nodes are a Blender-side visualization and analysis layer. They do
+not replace the Sionna RT propagation solver.
