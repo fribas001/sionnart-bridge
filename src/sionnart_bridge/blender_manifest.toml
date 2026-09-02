@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "sionnart_bridge"
-version = "1.8.1"
+version = "1.8.2"
 name = "SionnaRT-Bridge"
 tagline = "Run Sionna RT simulations and visualize results in Blender"
 maintainer = "Felipe Oliveira Ribas <felipe.oliveiraribas@ugent.be>"

@@ -84,13 +84,13 @@ If reported, record:
 
 ## Clean-install verification
 
-- [ ] Build the extension from the final release candidate
-- [ ] Verify the built ZIP checksum
-- [ ] Validate the extension with Blender 5.2
-- [ ] Install the ZIP in a clean Blender 5.2 profile
+- [x] Build the extension from the final release candidate
+- [x] Verify the built ZIP checksum
+- [x] Validate the extension with Blender 5.2
+- [x] Install the ZIP in a clean Blender 5.2 profile
 - [ ] Configure a clean external Sionna RT runtime using the documented environment
-- [ ] Run the add-on runtime/environment test successfully
-- [ ] Open and inspect both distributed `.blend` examples
+- [x] Run the add-on runtime/environment test successfully
+- [x] Open and inspect both distributed `.blend` examples
 - [ ] Verify that required example resources are packed or documented
 - [ ] Run one propagation-path simulation
 - [ ] Run one radio-map simulation if practical
@@ -98,9 +98,9 @@ If reported, record:
 
 ## Automated repository checks
 
-- [ ] `pytest` passes
-- [ ] `python scripts/check_release.py` passes
-- [ ] `git diff --check` reports no errors
+- [x] `pytest` passes
+- [x] `python scripts/check_release.py` passes
+- [x] `git diff --check` reports no errors
 - [ ] Repository-specific packaging checks pass
 - [ ] Working tree is clean before the final release commit
 - [ ] CI passes on the final release commit if CI is configured
@@ -109,10 +109,10 @@ If reported, record:
 
 Use the manual Zenodo draft workflow described in `docs/release-and-archiving.md`.
 
-- [ ] Create a Zenodo software draft for `SionnaRT-Bridge v1.8.2`
+- [x] Create a Zenodo software draft for `SionnaRT-Bridge v1.8.2`
 - [ ] Confirm title, creators, affiliations, license, description, and keywords
-- [ ] Reserve the version-specific DOI
-- [ ] Record the reserved DOI in release-preparation notes
+- [x] Reserve the version-specific DOI
+- [x] Record the reserved DOI in release-preparation notes
 - [ ] Do not publish the Zenodo draft yet
 - [ ] Do not enable a duplicate automatic Zenodo GitHub archive for the same release unless intentionally creating a separate record
 
@@ -122,25 +122,25 @@ After the Zenodo DOI has been reserved, update the release metadata together.
 
 Check at minimum:
 
-- [ ] `src/sionnart_bridge/blender_manifest.toml` -> `1.8.2`
-- [ ] `src/sionnart_bridge/__init__.py` -> `1.8.2`
-- [ ] `CITATION.cff` -> `1.8.2`
-- [ ] `README.md` -> `1.8.2` release/install references
-- [ ] `docs/SIONNA_2_BLENDER_5_2_WINDOWS.md` -> `1.8.2` package references
-- [ ] `docs/softwarex-metadata.md` -> final release URL/DOI values
-- [ ] `CHANGELOG.md` -> add/finalize `1.8.2` release entry
-- [ ] `RELEASE_CHECKLIST.md` -> final target remains `v1.8.2`
-- [ ] Any version-specific filenames -> `1.8.2`
-- [ ] Reserved DOI is inserted where appropriate
-- [ ] Release date is synchronized where applicable
+- [x] `src/sionnart_bridge/blender_manifest.toml` -> `1.8.2`
+- [x] `src/sionnart_bridge/__init__.py` -> `1.8.2`
+- [x] `CITATION.cff` -> `1.8.2`
+- [x] `README.md` -> `1.8.2` release/install references
+- [x] `docs/SIONNA_2_BLENDER_5_2_WINDOWS.md` -> `1.8.2` package references
+- [x] `docs/softwarex-metadata.md` -> final release URL/DOI values
+- [x] `CHANGELOG.md` -> add/finalize `1.8.2` release entry
+- [x] `RELEASE_CHECKLIST.md` -> final target remains `v1.8.2`
+- [x] Any version-specific filenames -> `1.8.2`
+- [x] Reserved DOI is inserted where appropriate
+- [x] Release date is synchronized where applicable
 
 ## Release build
 
-- [ ] Build `dist/sionnart_bridge-1.8.2.zip`
-- [ ] Install that exact ZIP in a clean Blender 5.2 profile
-- [ ] Run final smoke test using that exact ZIP
-- [ ] Compute SHA-256 for `dist/sionnart_bridge-1.8.2.zip`
-- [ ] Record the checksum
+- [x] Build `dist/sionnart_bridge-1.8.2.zip`
+- [x] Install that exact ZIP in a clean Blender 5.2 profile
+- [x] Run final smoke test using that exact ZIP
+- [x] Compute SHA-256 for `dist/sionnart_bridge-1.8.2.zip`
+- [x] Record the checksum
 - [ ] Do not rebuild the final ZIP without regenerating the checksum
 
 ## Git release

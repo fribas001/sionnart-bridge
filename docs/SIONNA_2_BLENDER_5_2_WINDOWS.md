@@ -7,7 +7,7 @@ Sionna is **not bundled with SionnaRT-Bridge** and must be installed
 separately before running simulations.
 
 This guide documents the Windows configuration tested with
-SionnaRT-Bridge 1.8.1.
+SionnaRT-Bridge 1.8.2.
 
 ## Tested configuration
 
@@ -339,10 +339,10 @@ the required Mitsuba CUDA variant can be selected successfully.
 
 Download the SionnaRT-Bridge release ZIP or build it from the repository.
 
-For version 1.8.1, the expected extension package is:
+For version 1.8.2, the expected extension package is:
 
 ```text
-sionnart_bridge-1.8.1.zip
+sionnart_bridge-1.8.2.zip
 ```
 
 ---
@@ -356,7 +356,7 @@ Then:
 1. Open **Edit → Preferences**
 2. Open **Get Extensions**
 3. Choose **Install from Disk**
-4. Select `sionnart_bridge-1.8.1.zip`
+4. Select `sionnart_bridge-1.8.2.zip`
 5. Enable **SionnaRT-Bridge**
 
 Sionna itself remains in the external environment:

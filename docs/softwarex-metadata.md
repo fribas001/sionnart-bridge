@@ -2,7 +2,7 @@
 
 Use these values for the SoftwareX code-metadata table once the final `v1.8.2` release and archival record are available.
 
-> **Before submission:** replace the release-URL and DOI placeholders below with the final version-specific values. Do not cite a DOI that has not yet been created.
+> **Before submission:** confirm the GitHub release URL and verify that the reserved DOI resolves to the published v1.8.2 Zenodo record.
 
 - **C1 — Current code version:** SionnaRT-Bridge v1.8.2
 - **C2 — Permanent link to code/repository:** GitHub `v1.8.2` release URL and, once published, the version-specific archival DOI
@@ -14,19 +14,19 @@ Use these values for the SoftwareX code-metadata table once the final `v1.8.2` r
 - **C8 — Installation requirements and guidance:** repository `README.md`, `docs/installation.md`, `docs/SIONNA_2_BLENDER_5_2_WINDOWS.md`, `docs/USER_GUIDE.md`, `docs/SIMULATION_PARAMETERS.md`, and `docs/WORKFLOWS.md`
 - **C9 — Support email:** felipe.oliveiraribas@ugent.be
 
-## Release placeholders
+## Release and archive identifiers
 
-Complete these only after the final release/archive exists:
+The DOI is reserved before tagging; confirm these identifiers after the GitHub release and Zenodo record are published:
 
 ```text
 GitHub release:
 https://github.com/fribas001/sionnart-bridge/releases/tag/v1.8.2
 
 Version DOI:
-<ADD VERSION-SPECIFIC DOI>
+10.5281/zenodo.20125209 (reserved; Zenodo record not yet published)
 
 Archive record:
-<ADD ARCHIVAL RECORD URL OR IDENTIFIER>
+Zenodo DOI 10.5281/zenodo.20125209 (reserved; record pending publication)
 ```
 
 ## Consistency checks before submission

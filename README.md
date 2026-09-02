@@ -11,7 +11,7 @@ Numerical radio-propagation computations are performed with **NVIDIA
 Sionna 2.0.1 / Sionna RT 2.0.1** through a dedicated Python environment that
 is compatible with Blender 5.2's Python runtime.
 
-The current extension version is **SionnaRT-Bridge 1.8.1**.
+The current extension version is **SionnaRT-Bridge 1.8.2**.
 
 The installable Blender extension is built from:
 
@@ -263,7 +263,7 @@ Before installing or running the Blender extension, follow:
 Download the release ZIP:
 
 ```text
-sionnart_bridge-1.8.1.zip
+sionnart_bridge-1.8.2.zip
 ```
 
 In Blender 5.2:
@@ -271,7 +271,7 @@ In Blender 5.2:
 1. Open **Edit → Preferences**
 2. Open **Get Extensions**
 3. Choose **Install from Disk**
-4. Select `sionnart_bridge-1.8.1.zip`
+4. Select `sionnart_bridge-1.8.2.zip`
 5. Enable **SionnaRT-Bridge**
 
 The standard Blender 5.2 workflow automatically looks for the recommended
@@ -362,7 +362,7 @@ After Sionna and SionnaRT-Bridge are installed:
 
 ## Integrated Mitsuba exporter
 
-SionnaRT-Bridge 1.8.1 includes its own integrated Mitsuba scene exporter:
+SionnaRT-Bridge 1.8.2 includes its own integrated Mitsuba scene exporter:
 
 ```text
 src/sionnart_bridge/integrated_mitsuba_exporter.py
@@ -378,7 +378,7 @@ representation required by Sionna RT workers.
 
 ## Geometry Nodes visualization library
 
-SionnaRT-Bridge 1.8.1 bundles its Geometry Nodes library directly inside the
+SionnaRT-Bridge 1.8.2 bundles its Geometry Nodes library directly inside the
 extension:
 
 ```text
@@ -562,10 +562,10 @@ New-Item -ItemType Directory -Force ".\dist" | Out-Null
     --output-dir ".\dist"
 ```
 
-The expected release asset for version 1.8.1 is:
+The expected release asset for version 1.8.2 is:
 
 ```text
-dist\sionnart_bridge-1.8.1.zip
+dist\sionnart_bridge-1.8.2.zip
 ```
 
 The extension manifest is:
@@ -577,7 +577,7 @@ src\sionnart_bridge\blender_manifest.toml
 and currently declares:
 
 ```text
-version = "1.8.1"
+version = "1.8.2"
 blender_version_min = "5.2.0"
 ```
 
@@ -628,7 +628,7 @@ simulation scene
 simulation frame / trajectory state
 ```
 
-For the currently tested SionnaRT-Bridge 1.8.1 environment:
+For the currently tested SionnaRT-Bridge 1.8.2 environment:
 
 ```text
 Blender          5.2

@@ -37,7 +37,7 @@ from bpy.app.handlers import persistent
 from mathutils import Matrix
 
 
-_ADDON_VERSION = "1.8.1"
+_ADDON_VERSION = "1.8.2"
 
 _ENV_COLLECTION = "sionna_env"
 _SCENE_COLLECTION = "scene"

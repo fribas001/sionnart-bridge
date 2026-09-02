@@ -2,7 +2,8 @@ cff-version: 1.2.0
 message: "If you use SionnaRT-Bridge, please cite the archived software release and the accompanying SoftwareX paper."
 title: "SionnaRT-Bridge"
 type: software
-version: 1.8.1
+version: 1.8.2
+doi: 10.5281/zenodo.20125209
 
 authors:
   - family-names: "Ribas"
