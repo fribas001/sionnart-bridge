@@ -13,5 +13,4 @@ stacked-height radio-map visualization in an urban Blender scene.
 - Geometry Nodes filtering and rendering
 - Animated scene or device configurations
 
-The Blender scene, simulation configuration, and representative outputs will
-be added before the v1.0.0 release.
+This directory contains preview material only. For complete runnable examples, see the procedural-vegetation and urban stacked-height examples in the parent examples directory.
