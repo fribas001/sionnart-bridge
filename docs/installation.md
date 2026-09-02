@@ -1,55 +1,105 @@
 # Installation
 
-## 1. Install Blender
+## 1. Install Blender 5.2
 
-Install Blender 4.5 LTS. The extension manifest declares Blender 4.5.0 as the
-minimum supported version.
+Install Blender 5.2 or newer. The extension manifest declares Blender 5.2.0
+as the minimum supported version.
 
-## 2. Install the scene-export compatibility component
+The SoftwareX reference environment uses Blender 5.2 with Blender Python 3.13.
 
-Install **Mitsuba-Blender 4.5 Compatibility v0.4.8** from its separate
-repository and archived release:
+## 2. Create the Sionna RT runtime environment
 
-`https://github.com/fribas001/mitsuba-blender-4.5-compatibility`
+SionnaRT-Bridge does not bundle NVIDIA Sionna. On Windows, create the tested
+runtime environment with Blender 5.2's bundled Python rather than an unrelated
+Conda or system Python installation.
 
-Use the release asset `mitsuba_blender_45_compatibility-0.4.8.zip` and verify
-its published SHA-256 checksum.
+The default Blender 5.2 Python executable is:
 
-## 3. Create the external Sionna RT environment
-
-Use Python 3.11:
-
-```bash
-python3.11 -m venv .venv-sionna
-source .venv-sionna/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-external.txt
+```text
+C:\Program Files\Blender Foundation\Blender 5.2\5.2\python\bin\python.exe
 ```
 
-On Windows, activate with `.venv-sionna\Scripts\activate`.
+In PowerShell:
 
-For CPU execution, install the LLVM/runtime components required by Mitsuba and
-Dr.Jit. GPU execution additionally requires a backend and driver combination
-supported by those projects.
+```powershell
+$BlenderPython = "C:\Program Files\Blender Foundation\Blender 5.2\5.2\python\bin\python.exe"
 
-## 4. Install SionnaRT-Bridge
+& $BlenderPython -m venv "$HOME\blender52-sionna"
 
-Download `sionnart_bridge-1.0.0.zip` from the v1.0.0 GitHub release. In Blender,
-open **Edit → Preferences → Get Extensions → Install from Disk**, select the
-ZIP file, and enable the extension if needed.
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -m pip install --upgrade pip setuptools wheel
 
-## 5. Configure and test
+& "$HOME\blender52-sionna\Scripts\python.exe" `
+    -m pip install -r requirements-external.txt
+```
 
-In the 3D View sidebar, open **Sionna RT**. Set:
+The SoftwareX reference environment uses:
 
-- the external Python executable;
-- a writable workspace directory;
-- the scene-export compatibility extension.
+- Sionna 2.0.1
+- Sionna RT 2.0.1
+- Mitsuba 3.8.0
+- DrJit 1.3.1
+- h5py 3.16.0
 
-Run **Test Environment** and record the reported Python, Sionna RT, and Mitsuba
-versions in the validation log.
+For detailed Windows setup, CUDA-backend checks, and troubleshooting, see
+[`SIONNA_2_BLENDER_5_2_WINDOWS.md`](SIONNA_2_BLENDER_5_2_WINDOWS.md).
+
+## 3. Install SionnaRT-Bridge
+
+For the SoftwareX release, install the release asset:
+
+```text
+sionnart_bridge-1.8.2.zip
+```
+
+In Blender, open **Edit → Preferences → Get Extensions → Install from Disk**,
+select the ZIP file, and enable the extension if needed.
+
+The extension package does not require the former separate
+Mitsuba-Blender 4.5 compatibility add-on.
+
+## 4. Runtime behavior
+
+In the normal Blender 5.2 workflow, you do not need to select a separate
+external Python interpreter.
+
+SionnaRT-Bridge launches isolated worker processes with Blender 5.2's bundled
+`python.exe`. The tested configuration stores the Sionna packages in:
+
+```text
+C:\Users\<username>\blender52-sionna\Lib\site-packages
+```
+
+The add-on auto-detects `~/blender52-sionna` and exposes those packages to the
+worker processes.
+
+Configure a writable workspace directory in the Sionna RT interface as needed.
+
+## 5. Test the environment
+
+Run **Test Environment** from the Sionna RT interface.
+
+For the SoftwareX reference environment, verify that the reported runtime is
+consistent with:
+
+```text
+Blender            5.2
+Blender Python     3.13
+Sionna             2.0.1
+Sionna RT          2.0.1
+Mitsuba            3.8.0
+DrJit              1.3.1
+h5py               3.16.0
+```
+
+If using the tested GPU workflow, also verify that the required Mitsuba/DrJit
+CUDA variant initializes successfully.
 
 ## Troubleshooting
 
-Attach the worker log, status JSON, version report, and a minimal example when
-opening an issue. Failed runs retain their run directory for diagnosis.
+For Windows-specific setup and diagnostics, see
+[`SIONNA_2_BLENDER_5_2_WINDOWS.md`](SIONNA_2_BLENDER_5_2_WINDOWS.md).
+
+When opening an issue, include the worker log, status JSON, version report, and
+a minimal reproducible example where possible. Failed runs retain their run
+directory for diagnosis.
