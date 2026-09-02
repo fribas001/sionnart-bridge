@@ -1,111 +1,194 @@
-# SionnaRT-Bridge v1.0.0 release checklist
+# SionnaRT-Bridge v1.8.2 release checklist
 
 ## Naming and version
 
 - [x] Repository/add-on name is `SionnaRT-Bridge`
-- [x] Semantic version is `1.0.0`
+- [ ] Final semantic version is `1.8.2` everywhere required
 - [x] Blender extension ID is `sionnart_bridge`
 - [x] GitHub repository is named `sionnart-bridge`
-- [x] SoftwareX manuscript C1 identifies v1.0.0
+- [x] SoftwareX metadata targets `v1.8.2`
+- [ ] Final Git tag is `v1.8.2`
 
 ## Legal, authorship, and attribution
 
 - [x] Full GPL-3.0-or-later license text is present
 - [x] Third-party software and citation requirements are documented
 - [x] Munich/OpenStreetMap attribution is included
-- [ ] Confirm institutional copyright ownership
+- [ ] Confirm institutional copyright ownership if required
 - [ ] Confirm final CRediT roles
-- [ ] Add and verify author ORCIDs
+- [ ] Add and verify author ORCIDs where applicable
 - [ ] Confirm final funding and acknowledgement statements
-- [ ] Publish and archive Mitsuba-Blender 4.5 Compatibility v0.4.8
-- [ ] Record the compatibility component DOI and SHA-256
+- [ ] Confirm author names and affiliations in `CITATION.cff`
+- [ ] Confirm author names and affiliations in the Zenodo draft
 
 ## Documentation
 
-- [x] Repair Markdown formatting and UTF-8 encoding
+- [x] Repair Markdown formatting and UTF-8 encoding issues encountered during cleanup
 - [x] Document installation and external-environment setup
-- [x] Document Geometry Nodes assets and append procedure
-- [x] Update the examples index
-- [x] Update the reproducibility-package description
-- [x] Update the validation and performance protocol
+- [x] Add user guide
+- [x] Add simulation-parameter reference
+- [x] Add practical workflow documentation
+- [x] Update examples index
+- [x] Update reproducibility guidance
+- [x] Update validation methodology
+- [x] Update SoftwareX metadata guidance
+- [x] Update release and archiving procedure
 - [ ] Verify every relative Markdown link
-- [ ] Remove all remaining release placeholders
+- [ ] Remove unintended release placeholders
 - [ ] Ensure README instructions reference assets that exist in the release
+- [ ] Ensure example READMEs match the final supported environment
+- [ ] Check publication-facing docs for unintended references to old environments or versions
 
 ## Reproducibility assets
 
-- [x] Add Geometry Nodes reference library
-- [x] Add Geometry Nodes SHA-256 checksum
-- [x] Add procedural-vegetation Blender example
-- [x] Add procedural-vegetation checksums
-- [x] Add Munich stacked-height Blender example
-- [x] Add Munich example checksum and attribution
-- [x] Reconcile the stacked-height spacing convention
-- [ ] Add direct Sionna RT reference scripts or documented reference commands
-- [ ] Add compact machine-readable validation results
-- [ ] Add validation environment metadata
-- [ ] Add validation-artifact SHA-256 checksums
+- [x] Procedural-vegetation Blender example is included
+- [x] Munich stacked-height Blender example is included
+- [x] Munich example attribution is included
+- [x] Stacked-height spacing convention is documented consistently
+- [x] Validation methodology is documented
+- [ ] Verify example-file checksums that are intended to ship
+- [ ] Verify any Geometry Nodes reference assets that are intended to ship
+- [ ] Confirm large external assets, if any, have retrieval instructions and checksums
+- [ ] Confirm repository documentation does not claim that a standalone raw validation package is included
 
-## Scientific validation
+## Scientific validation and smoke checks
 
-- [ ] Run propagation-path numerical-equivalence tests
-- [ ] Run planar radio-map numerical-equivalence tests
-- [ ] Run projected-map numerical-equivalence tests
-- [ ] Run stacked-height numerical-equivalence tests
-- [ ] Run coordinate-transfer tests
-- [ ] Verify external-file-to-Blender attribute agreement
-- [ ] Record all tolerances and pass/fail results
-- [ ] Add the final validation summary to the SoftwareX manuscript
+The SoftwareX manuscript contains the scientific validation description. The release repository does not require a separate raw 70-frame validation archive unless one is intentionally added later.
 
-## Performance measurements
+Before release:
 
-- [ ] Record evaluated-scene preparation time
-- [ ] Record scene-export time
-- [ ] Record external-worker startup time
-- [ ] Record Sionna RT scene-loading and solve times
-- [ ] Record serialization and Blender-import times
-- [ ] Record total bridge-workflow time
-- [ ] Record hardware, driver, backend, and software versions
-- [ ] Report repetitions, warm-up runs, mean, standard deviation, minimum, and maximum
+- [ ] Re-run at least one representative propagation-path case
+- [ ] Confirm returned paths import correctly into Blender
+- [ ] Verify external-file-to-Blender attributes for the smoke-test case
+- [ ] Verify one procedural-geometry frame sequence or representative sampled frames
+- [ ] Run one planar or stacked-height radio-map case if practical
+- [ ] Record the exact software environment used for final smoke testing
+- [ ] Confirm manuscript-reported validation wording matches `docs/validation.md`
+
+## Performance reporting
+
+Performance measurements are optional unless they are explicitly reported in the final manuscript.
+
+If reported, record:
+
+- [ ] scene preparation time
+- [ ] scene export time
+- [ ] external-worker startup time
+- [ ] Sionna RT scene-loading and solve time
+- [ ] result serialization time
+- [ ] Blender result-import time
+- [ ] total bridge-workflow time
+- [ ] hardware, driver, backend, and software versions
+- [ ] warm-up count and measured-run count
+- [ ] mean, standard deviation, minimum, and maximum where relevant
 
 ## Clean-install verification
 
-- [ ] Build the extension from the release commit
+- [ ] Build the extension from the final release candidate
 - [ ] Verify the built ZIP checksum
-- [ ] Validate the extension with Blender 4.5 LTS
-- [ ] Install the ZIP in a clean Blender profile
-- [ ] Configure a clean Python 3.11 external environment
-- [ ] Run Test Environment successfully
+- [ ] Validate the extension with Blender 5.2
+- [ ] Install the ZIP in a clean Blender 5.2 profile
+- [ ] Configure a clean external Sionna RT runtime using the documented environment
+- [ ] Run the add-on runtime/environment test successfully
 - [ ] Open and inspect both distributed `.blend` examples
-- [ ] Verify that all example resources are packed or documented
+- [ ] Verify that required example resources are packed or documented
 - [ ] Run one propagation-path simulation
-- [ ] Run one radio-map simulation
-- [ ] Save, close, and reopen an imported result
+- [ ] Run one radio-map simulation if practical
+- [ ] Save, close, and reopen an imported result if applicable
 
-## Release and archiving
+## Automated repository checks
 
-- [ ] CI passes on the final release commit
-- [ ] All repository checks and tests pass
-- [ ] Replace the changelog `Unreleased` marker with the release date
-- [ ] Create annotated tag `v1.0.0`
-- [ ] Create GitHub release
-- [ ] Attach `sionnart_bridge-1.0.0.zip`
-- [ ] Attach ZIP checksum
-- [ ] Attach or reference the Geometry Nodes library and checksum
-- [ ] Attach or reference the validation package
-- [ ] Archive the release in Zenodo
-- [ ] Add the version DOI to `CITATION.cff`
-- [ ] Add the version DOI to the README
-- [ ] Add the version DOI to the SoftwareX manuscript
-- [ ] Verify that all release and DOI links resolve
+- [ ] `pytest` passes
+- [ ] `python scripts/check_release.py` passes
+- [ ] `git diff --check` reports no errors
+- [ ] Repository-specific packaging checks pass
+- [ ] Working tree is clean before the final release commit
+- [ ] CI passes on the final release commit if CI is configured
+
+## Zenodo draft and DOI
+
+Use the manual Zenodo draft workflow described in `docs/release-and-archiving.md`.
+
+- [ ] Create a Zenodo software draft for `SionnaRT-Bridge v1.8.2`
+- [ ] Confirm title, creators, affiliations, license, description, and keywords
+- [ ] Reserve the version-specific DOI
+- [ ] Record the reserved DOI in release-preparation notes
+- [ ] Do not publish the Zenodo draft yet
+- [ ] Do not enable a duplicate automatic Zenodo GitHub archive for the same release unless intentionally creating a separate record
+
+## Final version synchronization
+
+After the Zenodo DOI has been reserved, update the release metadata together.
+
+Check at minimum:
+
+- [ ] `src/sionnart_bridge/blender_manifest.toml` -> `1.8.2`
+- [ ] `src/sionnart_bridge/__init__.py` -> `1.8.2`
+- [ ] `CITATION.cff` -> `1.8.2`
+- [ ] `README.md` -> `1.8.2` release/install references
+- [ ] `docs/SIONNA_2_BLENDER_5_2_WINDOWS.md` -> `1.8.2` package references
+- [ ] `docs/softwarex-metadata.md` -> final release URL/DOI values
+- [ ] `CHANGELOG.md` -> add/finalize `1.8.2` release entry
+- [ ] `RELEASE_CHECKLIST.md` -> final target remains `v1.8.2`
+- [ ] Any version-specific filenames -> `1.8.2`
+- [ ] Reserved DOI is inserted where appropriate
+- [ ] Release date is synchronized where applicable
+
+## Release build
+
+- [ ] Build `dist/sionnart_bridge-1.8.2.zip`
+- [ ] Install that exact ZIP in a clean Blender 5.2 profile
+- [ ] Run final smoke test using that exact ZIP
+- [ ] Compute SHA-256 for `dist/sionnart_bridge-1.8.2.zip`
+- [ ] Record the checksum
+- [ ] Do not rebuild the final ZIP without regenerating the checksum
+
+## Git release
+
+- [ ] Create the final release-preparation commit
+- [ ] Record the final commit hash
+- [ ] Create annotated tag `v1.8.2`
+- [ ] Verify the tag points to the intended commit
+- [ ] Push the final branch
+- [ ] Push tag `v1.8.2`
+- [ ] Create GitHub release `SionnaRT-Bridge v1.8.2`
+- [ ] Attach `sionnart_bridge-1.8.2.zip`
+- [ ] Attach or publish the SHA-256 checksum
+- [ ] Ensure release notes describe the supported environment and important limitations
+- [ ] Ensure release notes do not claim unavailable validation artifacts are included
+
+## Zenodo publication
+
+- [ ] Upload the final immutable release artifact(s) to the existing Zenodo draft
+- [ ] Confirm uploaded files match the GitHub release
+- [ ] Confirm the reserved version DOI is unchanged
+- [ ] Confirm metadata version is `1.8.2`
+- [ ] Confirm repository and release links
+- [ ] Publish the Zenodo record
+- [ ] Verify that the DOI resolves
+- [ ] Verify title, creators, license, version, and files after publication
+- [ ] Record the final version DOI
+- [ ] Record the concept DOI separately if useful
 
 ## Manuscript submission
 
-- [ ] Fill all numerical values in the validation table
-- [ ] Fill all hardware and environment placeholders
-- [ ] Verify example values directly from retained numerical results
-- [ ] Remove “release candidate” and drafting notes
+- [ ] Update manuscript code version to `v1.8.2`
+- [ ] Add the final GitHub release URL
+- [ ] Add the final version-specific DOI
+- [ ] Ensure the software/data availability statement matches what is actually archived
+- [ ] Ensure validation wording matches the repository scope
+- [ ] Ensure software environment matches the tagged release documentation
+- [ ] Verify example values directly from retained numerical results where applicable
+- [ ] Remove drafting notes and release-candidate wording
 - [ ] Finalize funding, acknowledgements, and CRediT roles
-- [ ] Confirm manuscript word count and SoftwareX template compliance
-- [ ] Ensure the availability statement matches the archived release
-- [ ] Complete the final author review
+- [ ] Confirm SoftwareX template requirements
+- [ ] Complete final author review
+
+## Final immutability check
+
+After publication:
+
+- [ ] Do not move or rewrite tag `v1.8.2`
+- [ ] Do not replace the published Zenodo `v1.8.2` files with different content
+- [ ] Keep the GitHub release asset and checksum unchanged
+- [ ] Make future corrections in a new patch release, for example `v1.8.3`
