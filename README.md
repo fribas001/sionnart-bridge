@@ -648,6 +648,10 @@ See:
 
 ## Documentation
 
+- [User guide](docs/USER_GUIDE.md) - complete overview of the Blender workflow and interface
+- [Simulation parameter reference](docs/SIMULATION_PARAMETERS.md) - physical, solver, antenna, material, and radio-map settings
+- [Example workflows](docs/WORKFLOWS.md) - step-by-step propagation-path, trajectory, procedural, 2D, and 3D examples
+
 - [Sionna 2.0.1 installation for Blender 5.2 on Windows](docs/SIONNA_2_BLENDER_5_2_WINDOWS.md)
 - [Installation](docs/installation.md)
 - [Reproducibility](docs/reproducibility.md)
