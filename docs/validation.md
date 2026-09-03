@@ -106,7 +106,7 @@ This check validates data transport and reconstruction inside Blender rather tha
 
 ## Result serialization checks
 
-For CSV or HDF5 output, verify that:
+For CSV output, verify that:
 
 - frame indices are preserved;
 - TX/RX indices are preserved;

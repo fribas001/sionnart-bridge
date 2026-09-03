@@ -349,7 +349,7 @@ See:
 docs/output-schemas/
 ```
 
-HDF5 or CSV output is preferable to relying only on Blender visualization when the results will be analyzed quantitatively.
+CSV output is preferable to relying only on Blender visualization when the results will be analyzed quantitatively.
 
 ---
 

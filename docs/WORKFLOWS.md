@@ -220,12 +220,11 @@ Available choices include:
 ```text
 No persistent export
 CSV
-HDF5
 ```
 
 For a first visual test, no persistent export is acceptable.
 
-For scientific analysis, use a persistent structured output.
+For scientific analysis, use persistent CSV output.
 
 ---
 
@@ -953,11 +952,6 @@ Choose the persistent output format and click:
 Run Simulation
 ```
 
-For structured HDF5 output, regular 3D coverage data are organized logically as:
-
-```text
-[frame, z, y, x]
-```
 
 ---
 
@@ -1228,7 +1222,7 @@ For a result that will be reported in a paper or archived dataset:
 6. Record TX/RX antenna settings and powers.
 7. Define exactly what Blender frame means.
 8. Use explicit timeline ranges rather than only interactive Dynamic Mode.
-9. Use persistent CSV or HDF5 output.
+9. Use persistent CSV output.
 10. Retain simulation metadata together with results.
 11. Record skipped or failed frames.
 12. Archive scripts used to produce derived statistics.

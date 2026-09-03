@@ -170,28 +170,6 @@ where they are constrained by Sionna 2.0.1.
 
 ---
 
-## Step 6 — Install HDF5 support
-
-SionnaRT-Bridge supports structured HDF5 simulation-result export.
-
-Install `h5py`:
-
-```powershell
-& "$HOME\blender52-sionna\Scripts\python.exe" `
-    -m pip install h5py
-```
-
-Sionna 2.0.1 may already install a compatible version of `h5py`, but running
-this command ensures it is available.
-
-The tested environment uses:
-
-```text
-h5py 3.16.0
-```
-
----
-
 # Verify the installation
 
 ## Step 7 — Verify Sionna
@@ -511,30 +489,6 @@ Mitsuba/DrJit installation independently of PyTorch.
 
 ---
 
-## HDF5 export is unavailable
-
-Check `h5py`:
-
-```powershell
-& "$HOME\blender52-sionna\Scripts\python.exe" `
-    -c "import h5py; print('h5py:', h5py.__version__)"
-```
-
-The tested environment reports:
-
-```text
-h5py: 3.16.0
-```
-
-If `h5py` is missing:
-
-```powershell
-& "$HOME\blender52-sionna\Scripts\python.exe" `
-    -m pip install h5py
-```
-
----
-
 # Verified runtime
 
 This workflow was validated with:
@@ -569,4 +523,4 @@ After the environment passes the tests above:
 6. Configure antennas, materials, propagation mechanisms, and solver settings.
 7. Run a path or radio-map simulation.
 8. Inspect the generated Blender visualization.
-9. Optionally export simulation results as CSV or HDF5.
+9. Optionally export simulation results as CSV.

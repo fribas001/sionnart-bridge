@@ -798,11 +798,6 @@ Cell Y: 1 m
 Cell Z: 1 m
 ```
 
-For regular HDF5 output, the logical organization is:
-
-```text
-[frame, z, y, x]
-```
 
 ---
 

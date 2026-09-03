@@ -31,8 +31,6 @@ The project uses semantic versioning for publication releases.
 ### Added
 - Blender 5.2 and Python 3.13 workflow.
 - Integrated Mitsuba scene exporter.
-- HDF5 schema v5 export.
-- Tile_spacial_dataset spatial integration.
 - Automatic bundled Geometry Nodes.
 - PointCloud-driven TX/RX motion.
 - Dynamic simulation mode.

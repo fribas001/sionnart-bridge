@@ -15,7 +15,7 @@ citation requirements.
 | Sionna RT | 2.0.1 | Radio-propagation solver | Apache-2.0 |
 | Mitsuba 3 | 3.8.0 | Ray-tracing infrastructure used by Sionna RT | BSD-3-Clause |
 | DrJit | 1.3.1 | CPU/GPU JIT computation used by Mitsuba | BSD-3-Clause |
-| h5py | 3.16.0 | HDF5 result export | BSD-3-Clause |
+| h5py | 3.16.0 | Structured result storage | BSD-3-Clause |
 
 Version numbers above describe the SoftwareX reference environment. Users
 should follow the project-specific compatibility requirements documented in
@@ -91,7 +91,7 @@ Official project:
 
 https://github.com/h5py/h5py
 
-SionnaRT-Bridge uses h5py for structured HDF5 result export.
+SionnaRT-Bridge uses h5py for structured result storage.
 
 The SoftwareX reference environment uses:
 

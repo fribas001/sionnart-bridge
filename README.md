@@ -39,13 +39,8 @@ src/sionnart_bridge/
 - Integrated Mitsuba scene exporter
 - Scene caching and subprocess worker execution
 - CSV + metadata export
-- Structured HDF5 + metadata export
-- Frame-stacked 2D and 3D coverage tensors
-- `Tile_spacial_dataset` HDF5 integration
-- Spatial joins between coverage cells and tile information
 - Mobility and Doppler support
 - Automatic bundled Sionna Geometry Nodes
-- Headless Blender execution support
 
 ---
 
@@ -135,13 +130,6 @@ Install Sionna 2.0.1:
 ```powershell
 & "$HOME\blender52-sionna\Scripts\python.exe" `
     -m pip install "sionna==2.0.1"
-```
-
-Install HDF5 support:
-
-```powershell
-& "$HOME\blender52-sionna\Scripts\python.exe" `
-    -m pip install h5py
 ```
 
 Verify Sionna:
@@ -352,8 +340,7 @@ After Sionna and SionnaRT-Bridge are installed:
 7. Configure carrier frequency, arrays, solver settings, and propagation
    mechanisms.
 8. Choose the desired simulation mode.
-9. Choose the desired export mode: no durable export, CSV + metadata, or
-   HDF5 + metadata.
+9. Choose the desired export mode: no durable export or CSV + metadata.
 10. Run the simulation.
 11. Inspect propagation paths or radio maps through the bundled Geometry Nodes
     visualization groups.
@@ -431,75 +418,6 @@ for transmitter sampling and motion.
 
 ---
 
-## Tile spatial dataset integration
-
-SionnaRT-Bridge can integrate with a Blender PointCloud object named exactly:
-
-```text
-Tile_spacial_dataset
-```
-
-When HDF5 export is enabled and this object exists, its numeric attributes can
-be embedded into the simulation HDF5 output.
-
-The dataset is stored under:
-
-```text
-/spatial_datasets/Tile_spacial_dataset
-```
-
-Coverage maps can include a spatial join between coverage cells and tile
-indices.
-
-For 2D coverage this enables relationships between simulated radio coverage
-and tile-level information such as:
-
-```text
-building information
-statistical-sector information
-population information
-base-station information
-ROI / buffer classification
-other numeric tile attributes
-```
-
-The exact spelling `Tile_spacial_dataset` is retained for compatibility with
-the Tile Dataset Blender workflow.
-
----
-
-## HDF5 result export
-
-SionnaRT-Bridge supports structured HDF5 export.
-
-Current HDF5 output supports simulation categories including:
-
-```text
-/simulations/paths
-/simulations/coverage_2d
-/simulations/coverage_3d
-```
-
-For compatible regular radio-map grids, coverage values are stored as dense
-time-series tensors.
-
-Typical 2D coverage layout:
-
-```text
-[frame, y, x]
-```
-
-Typical 3D coverage layout:
-
-```text
-[frame, z, y, x]
-```
-
-The HDF5 output also stores metadata describing dimensions, simulation
-configuration, source datasets, and available spatial joins.
-
----
-
 ## Dynamic simulations
 
 The extension supports dynamic transmitter and receiver workflows.
@@ -509,23 +427,6 @@ drive TX/RX positions before Sionna RT simulations are launched.
 
 This enables frame-by-frame radio-propagation studies for mobility,
 trajectory sampling, UAV studies, and other dynamic network scenarios.
-
----
-
-## Headless Blender execution
-
-SionnaRT-Bridge can also be used with Blender in background/headless mode.
-
-A typical Blender command follows the form:
-
-```powershell
-& "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" `
-    -b "project.blend" `
-    -P "run_sionna_headless.py"
-```
-
-Scripts using Blender's `bpy` API must be executed by Blender's Python runtime,
-not by a normal standalone Python interpreter.
 
 ---
 

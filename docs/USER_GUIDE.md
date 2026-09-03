@@ -21,7 +21,7 @@ Blender is used to define geometry, radio materials, transmitters, receivers, an
 9. Enable propagation paths, 2D radio maps, 3D stacked-height radio maps, or a combination.
 10. Select the result-export mode.
 11. Run the simulation.
-12. Inspect Blender geometry and/or exported CSV/HDF5 results.
+12. Inspect Blender geometry and/or exported CSV results.
 
 For scientific experiments, record the software versions, scene-generation rules, solver settings, random seed, and the meaning of Blender frames together with the results.
 
@@ -283,18 +283,6 @@ SionnaRT-Bridge creates height-resolved radio maps by evaluating a sequence of h
 
 > **Important:** This does not implement a new volumetric electromagnetic solver. It is a structured stack of established planar Sionna RT radio-map calculations.
 
-For regular structured grids, HDF5 coverage results use:
-
-```text
-[frame, z, y, x]
-```
-
-Regular two-dimensional radio maps use:
-
-```text
-[frame, y, x]
-```
-
 ---
 
 ## 16. Result Export
@@ -307,25 +295,13 @@ Useful for interactive inspection and quick testing, but generally not sufficien
 
 Useful for tabular inspection, path analysis, smaller datasets, and interoperability with common analysis tools.
 
-### HDF5 with metadata
-
-Recommended for larger structured experiments. Principal groups include:
-
-```text
-/simulations/paths
-/simulations/coverage_2d
-/simulations/coverage_3d
-```
-
-HDF5 preserves structured arrays and metadata and is generally the most complete persistent representation for simulation campaigns.
-
 ---
 
 ## 17. Geometry Nodes Visualization and Analytics
 
 Returned simulation results can be represented as attributed Blender geometry. Bundled Geometry Nodes can reconstruct propagation paths, filter results, apply thresholds, select frames or heights, visualize radio maps, color values, and animate simulation sequences.
 
-Visualization supports exploration and communication but is not a substitute for numerical validation. For publication-grade quantitative analysis, retain and analyze structured numerical outputs.
+Visualization supports exploration and communication but is not a substitute for numerical validation. For publication-grade quantitative analysis, retain and analyze exported numerical outputs.
 
 ---
 
@@ -382,7 +358,7 @@ New users should start with a minimal static scene:
 9. Run only the current frame.
 10. Inspect the returned paths.
 
-After this works, progressively add diffraction, more complex materials, procedural geometry, timeline sweeps, radio maps, PointCloud trajectories, and HDF5 export.
+After this works, progressively add diffraction, more complex materials, procedural geometry, timeline sweeps, radio maps, and PointCloud trajectories.
 
 ---
 

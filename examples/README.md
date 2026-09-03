@@ -44,7 +44,7 @@ For a reproducible example run:
 3. verify the documented software environment;
 4. retain the exact Blender scene used;
 5. record solver settings and random seed;
-6. retain CSV or HDF5 output for quantitative analysis where applicable;
+6. retain CSV output for quantitative analysis where applicable;
 7. record checksums for archived result files when practical.
 
 See also:
