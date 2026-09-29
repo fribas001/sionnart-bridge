@@ -25,6 +25,41 @@ from pathlib import Path
 
 import numpy as np
 
+if __package__:
+    from .worker_runtime import (
+        package_version,
+        now_utc,
+        _atomic_replace_with_retry,
+        write_json,
+        write_status_json,
+        frame_materials,
+        make_scattering_pattern,
+        _radio_material_name_key,
+        _scalar_float,
+        _find_loaded_radio_material,
+        _itu_values,
+        apply_radio_materials,
+        ensure_tx_array,
+        make_path_solver,
+    )
+else:
+    from worker_runtime import (
+        package_version,
+        now_utc,
+        _atomic_replace_with_retry,
+        write_json,
+        write_status_json,
+        frame_materials,
+        make_scattering_pattern,
+        _radio_material_name_key,
+        _scalar_float,
+        _find_loaded_radio_material,
+        _itu_values,
+        apply_radio_materials,
+        ensure_tx_array,
+        make_path_solver,
+    )
+
 
 SPEED_OF_LIGHT_M_S = 299_792_458.0
 INVALID_SHAPE = 0xFFFFFFFF
@@ -107,67 +142,6 @@ GEOMETRY_NODES_CSV_COLUMNS = (
 )
 
 
-def package_version():
-    for distribution in ("sionna-rt", "sionna_rt"):
-        try:
-            return importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError:
-            pass
-    return "unknown"
-
-
-def now_utc():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _atomic_replace_with_retry(temporary, destination, attempts=24):
-    temporary = Path(temporary)
-    destination = Path(destination)
-    last_error = None
-    for attempt in range(max(1, int(attempts))):
-        try:
-            os.replace(temporary, destination)
-            return
-        except (PermissionError, OSError) as exc:
-            last_error = exc
-            if attempt + 1 >= attempts:
-                break
-            time.sleep(min(1.0, 0.04 * (attempt + 1)))
-    raise last_error or RuntimeError(f"Could not replace {destination}")
-
-
-def write_json(path, payload, *, best_effort=False):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(
-        path.name + f".{os.getpid()}.{time.time_ns()}.tmp"
-    )
-    try:
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-            handle.flush()
-            try:
-                os.fsync(handle.fileno())
-            except OSError:
-                pass
-        _atomic_replace_with_retry(temporary, path)
-        return True
-    except Exception as exc:
-        try:
-            temporary.unlink(missing_ok=True)
-        except Exception:
-            pass
-        if best_effort:
-            print(f"WARNING: could not update status file {path}: {exc}", flush=True)
-            return False
-        raise
-
-
-def write_status_json(path, payload):
-    # Status updates must never terminate an otherwise valid long simulation.
-    return write_json(path, payload, best_effort=True)
-
-
 def write_geometry_nodes_csv(path, rows):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,145 +158,6 @@ def to_numpy(value):
         return value.numpy()
     return np.asarray(value)
 
-
-
-
-def frame_materials(runtime, frame):
-    materials = list(frame.get("materials") or runtime.get("materials") or [])
-    return materials
-
-
-def make_scattering_pattern(spec, runtime):
-    pattern = str(spec.get("scattering_pattern", "lambertian")).lower()
-    if pattern == "directive":
-        return runtime["DirectivePattern"](
-            alpha_r=max(1, int(spec.get("directive_alpha_r", 1)))
-        )
-    if pattern == "backscattering":
-        return runtime["BackscatteringPattern"](
-            alpha_r=max(1, int(spec.get("backscatter_alpha_r", 1))),
-            alpha_i=max(1, int(spec.get("backscatter_alpha_i", 1))),
-            lambda_=min(1.0, max(0.0, float(spec.get("backscatter_lambda", 1.0)))),
-        )
-    return runtime["LambertianPattern"]()
-
-
-def _radio_material_name_key(value):
-    """Normalize Sionna/Mitsuba material IDs for stable matching."""
-    value = str(value or "").strip().lower()
-    if value.startswith("mat-"):
-        value = value[4:]
-    return value
-
-
-def _scalar_float(value, default=0.0):
-    """Convert a scalar Dr.Jit/Mitsuba value without assuming its container."""
-    try:
-        return float(value)
-    except Exception:
-        try:
-            return float(value[0])
-        except Exception:
-            return float(default)
-
-
-def _find_loaded_radio_material(scene, *names):
-    wanted = {_radio_material_name_key(name) for name in names if name}
-    materials = scene.radio_materials
-    for key, material in materials.items():
-        candidates = {
-            _radio_material_name_key(key),
-            _radio_material_name_key(getattr(material, "name", "")),
-            _radio_material_name_key(getattr(material, "id", lambda: "")()),
-        }
-        if wanted & candidates:
-            return material
-    return None
-
-
-def _itu_values(scene, itu_type, runtime):
-    """Evaluate an ITU preset at the scene's current carrier frequency.
-
-    A temporary material is attached to the scene only long enough for its
-    frequency callback to evaluate. It is never added to ``scene.radio_materials``
-    and is never assigned to a mesh.
-    """
-    probe = runtime["ITURadioMaterial"](
-        name=f"__sbr_itu_probe_{itu_type}",
-        itu_type=itu_type,
-        thickness=0.1,
-    )
-    probe.scene = scene
-    return (
-        _scalar_float(probe.relative_permittivity, 1.0),
-        _scalar_float(probe.conductivity, 0.0),
-    )
-
-
-def apply_radio_materials(scene, frame, runtime):
-    """Update the radio materials loaded from XML in place.
-
-    Replacing a material on an already-loaded/merged Mitsuba mesh can leave the
-    renderer traversal out of sync and produced ``No object found with name`` in
-    v0.17.1. The XML now creates one mutable ``radio-material`` placeholder per
-    configured Blender material, so only its numeric properties are changed.
-    """
-    summaries = []
-    available = sorted(scene.radio_materials.keys())
-    for spec in frame_materials(runtime, frame):
-        source_name = str(spec.get("source_name", "")).strip()
-        runtime_root = str(spec.get("runtime_name", source_name or "sbr_material")).strip()
-        if not source_name:
-            continue
-
-        material = _find_loaded_radio_material(scene, source_name, runtime_root)
-        if material is None:
-            raise RuntimeError(
-                "Configured radio material placeholder was not loaded: "
-                f"{source_name!r}. Available materials: {available[:12]}"
-            )
-
-        model = str(spec.get("model", "ITU")).upper()
-        itu_type = str(spec.get("itu_type", "concrete"))
-        if model == "ITU":
-            eta_r, sigma = _itu_values(scene, itu_type, runtime)
-        else:
-            eta_r = max(1.0, float(spec.get("relative_permittivity", 1.0)))
-            sigma = max(0.0, float(spec.get("conductivity", 0.0)))
-
-        material.relative_permittivity = eta_r
-        material.conductivity = sigma
-        material.thickness = max(0.0, float(spec.get("thickness", 0.1)))
-        material.scattering_coefficient = min(
-            1.0, max(0.0, float(spec.get("scattering_coefficient", 0.0)))
-        )
-        material.xpd_coefficient = min(
-            1.0, max(0.0, float(spec.get("xpd_coefficient", 0.0)))
-        )
-        material.scattering_pattern = make_scattering_pattern(spec, runtime)
-        color = tuple(float(v) for v in spec.get("color", (0.5, 0.5, 0.5))[:3])
-        try:
-            material.color = color
-        except Exception:
-            pass
-
-        object_count = sum(
-            1 for obj in scene.objects.values()
-            if getattr(obj, "radio_material", None) is material
-        )
-        summaries.append({
-            "blender_name": spec.get("blender_name", source_name),
-            "sionna_name": getattr(material, "name", source_name),
-            "model": model,
-            "itu_type": itu_type if model == "ITU" else None,
-            "object_count": object_count,
-            "relative_permittivity": eta_r,
-            "conductivity": sigma,
-            "thickness": _scalar_float(material.thickness, spec.get("thickness", 0.1)),
-            "scattering_coefficient": _scalar_float(material.scattering_coefficient, 0.0),
-            "xpd_coefficient": _scalar_float(material.xpd_coefficient, 0.0),
-        })
-    return summaries
 
 def safe_scalar(array, index, default=0.0):
     try:
@@ -401,7 +236,6 @@ def path_interaction_counts(raw_interactions):
         elif raw_value != 0:
             counts["path_num_mixed"] += 1
     return counts
-
 
 
 def frame_simulation(config, frame_payload):
@@ -515,8 +349,8 @@ def _channel_link_analytics(frame_number, pos_idx, tx, rx, pair_paths, config):
             "tx_name": tx.get("blender_name", tx.get("name", "TX")),
             "rx_name": rx.get("blender_name", rx.get("name", "RX")),
             "path_count": 0, "los_available": False,
-            "total_power_linear": 0.0, "total_power_db": -600.0,
-            "strongest_path_gain_db": -600.0,
+            "total_power_linear": 0.0, "total_power_db": None,
+            "strongest_path_gain_db": None,
             "dominant_to_rest_db": 0.0,
             "first_arrival_ns": None, "mean_excess_delay_ns": None,
             "rms_delay_spread_ns": None,
@@ -1088,6 +922,13 @@ def _solve_frame(scene, solver, frame_runtime, frame_payload):
         seed=int(simulation["seed"]),
     )
 
+    from isac_export import export_frame
+    isac_frame = dict(frame_payload)
+    if config.get("isac", {}).get("enabled"):
+        from isac_export import runtime_material_metadata
+        isac_frame["resolved_radio_materials"] = runtime_material_metadata(scene)
+    isac_record = export_frame(paths, config, isac_frame)
+
     vertices = to_numpy(paths.vertices)
     interactions = to_numpy(paths.interactions)
     objects = to_numpy(paths.objects)
@@ -1184,6 +1025,7 @@ def _solve_frame(scene, solver, frame_runtime, frame_payload):
         })
 
     return {
+        "isac": isac_record,
         "frame": int(frame_payload["frame"]),
         "simulation": simulation,
         "materials": material_summary,
@@ -1265,6 +1107,7 @@ def main(config_path):
 
     scene = None
     current_scene_xml = None
+    procedural_scene = bool(config.get("procedural_scene", False))
     material_runtime = {
         "RadioMaterial": RadioMaterial,
         "ITURadioMaterial": ITURadioMaterial,
@@ -1274,21 +1117,30 @@ def main(config_path):
     }
     frame_runtime = dict(config)
     frame_runtime.update(material_runtime)
-    solver = PathSolver()
+    current_deterministic = bool(config.get("simulation", {}).get("deterministic", True))
+    solver = make_path_solver(PathSolver, current_deterministic)
 
     frame_results = []
     all_point_rows = []
     for index, frame_payload in enumerate(frame_payloads, start=1):
         frame_number = int(frame_payload["frame"])
         simulation = frame_simulation(config, frame_payload)
+        requested_deterministic = bool(simulation.get("deterministic", True))
+        if requested_deterministic != current_deterministic:
+            solver = make_path_solver(PathSolver, requested_deterministic)
+            current_deterministic = requested_deterministic
         frame_scene_xml = str(frame_payload.get("scene_xml") or config["scene_xml"])
-        if scene is None or frame_scene_xml != current_scene_xml:
+        # Procedural scenes are intentionally reloaded for every frame so
+        # evaluated animated blocker geometry cannot be retained from an earlier frame.
+        if procedural_scene or scene is None or frame_scene_xml != current_scene_xml:
             write_status_json(status_path, {
                 "state": "loading_scene", "updated_utc": now_utc(),
                 "frame": frame_number, "frame_index": index,
                 "frame_count": len(frame_payloads), "scene_xml": frame_scene_xml,
             })
             scene = load_scene(frame_scene_xml, merge_shapes=True)
+            if procedural_scene:
+                solver = make_path_solver(PathSolver, current_deterministic)
             frame_runtime = dict(config)
             frame_runtime.update(material_runtime)
             frame_runtime["scene_xml"] = frame_scene_xml
@@ -1313,6 +1165,9 @@ def main(config_path):
         })
         frame_result, point_rows = _solve_frame(scene, solver, frame_runtime, frame_payload)
         frame_results.append(frame_result)
+        if config.get("isac", {}).get("enabled"):
+            from isac_export import finalize
+            finalize(config, [f.get("isac") for f in frame_results])
         all_point_rows.extend(point_rows)
 
     combined_csv_path = Path(output.get("results_csv", status_path.parent / "paths_all_frames.csv"))
@@ -1384,11 +1239,5 @@ if __name__ == "__main__":
         except Exception:
             pass
     finally:
-        # Dr.Jit/Mitsuba can return a Windows-native shutdown status after all
-        # output has been written. Flush and exit directly with our own code.
-        try:
-            import sys
-            sys.stdout.flush()
-            sys.stderr.flush()
-        finally:
-            os._exit(int(exit_code))
+        from worker_runtime import exit_worker
+        exit_worker(exit_code)

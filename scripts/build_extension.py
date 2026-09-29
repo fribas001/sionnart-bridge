@@ -13,7 +13,7 @@ with (SOURCE / "blender_manifest.toml").open("rb") as handle:
     manifest = tomllib.load(handle)
 version = manifest["version"]
 extension_id = manifest["id"]
-paths = manifest["build"]["paths"]
+paths = list(dict.fromkeys(["blender_manifest.toml", *manifest["build"]["paths"]]))
 
 DIST.mkdir(exist_ok=True)
 out = DIST / f"{extension_id}-{version}.zip"

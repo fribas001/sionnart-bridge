@@ -1,0 +1,32 @@
+// Pure report-function regression tests. No browser or DOM is launched.
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(path.join(__dirname,'../parameter_report.html'),'utf8');
+const functions=source.slice(source.indexOf('function variation('),source.indexOf('const catalog='));
+const context=vm.createContext({});
+vm.runInContext("const numeric=x=>typeof x==='number'&&Number.isFinite(x), finite=x=>numeric(x)||typeof x==='boolean';"+functions,context);
+const result=vm.runInContext('variation([-120,-110,-100,null,NaN])',context);
+assert.equal(result.n,3);assert.equal(result.mean,-110);assert.equal(result.median,-110);assert.equal(result.delta,20);
+assert.ok(Math.abs(result.std-Math.sqrt(200/3))<1e-12);
+assert.equal(vm.runInContext('pearson([1,2,3],[-120,-110,-100])',context),1);
+assert.equal(vm.runInContext('pearson([1,1,1],[1,2,3])',context),null);
+assert.equal(vm.runInContext('pearson([1,2],[1,2])',context),null);
+assert.equal(vm.runInContext('variation(Array.from({length:150000},(_,i)=>i)).max',context),149999);
+const csv=source.slice(source.indexOf('function csv('),source.indexOf("$('data').onclick="));
+vm.runInContext(csv,context);
+assert.equal(vm.runInContext('csv(-100)',context),'"-100"');
+assert.equal(vm.runInContext('csv("=1+1")',context),'"\'=1+1"');
+const link=source.slice(source.indexOf('const linkKey='),source.indexOf('const links='));
+vm.runInContext(link,context);
+assert.equal(vm.runInContext('linkKey({pair:0,tx:"TX",rx:"RX"})===linkKey({pair:1,tx:"TX",rx:"RX"})',context),true);
+assert.equal(vm.runInContext('linkKey({pair:0,tx:"TX",rx:"RX"})===linkKey({pair:0,tx:"TX",rx:"RX2"})',context),false);
+console.log('REPORT_MATH_PASS');
+// Parse the full browser script and test the added vegetation plot selector.
+new vm.Script(source.slice(source.indexOf("'use strict';"),source.lastIndexOf('</script>')));
+const selectors=vm.createContext({enabled:false});
+vm.runInContext(`const ordered=['gn/density','vegetation/object/Tree/leaf_area_estimate_m2','geometry/area','vegetation/settings/corridor_width_m'];
+const catalog={'gn/density':{role:'input'},'vegetation/object/Tree/leaf_area_estimate_m2':{role:'descriptor'},'geometry/area':{role:'descriptor'},'vegetation/settings/corridor_width_m':{role:'context'}};
+const studies=[{}],varies=()=>true,$=()=>({checked:enabled});`+source.slice(source.indexOf('function changingKeys('),source.indexOf('const initial=')),selectors);
+assert.equal(vm.runInContext('changingKeys().length',selectors),1);
+selectors.enabled=true;
+assert.equal(vm.runInContext('changingKeys().length',selectors),2);
+console.log('REPORT_VEGETATION_SELECTOR_PASS');

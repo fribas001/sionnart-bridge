@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "sionnart_bridge"
-version = "1.8.2"
+version = "2.0.0"
 name = "SionnaRT-Bridge"
 tagline = "Run Sionna RT simulations and visualize results in Blender"
 maintainer = "Felipe Oliveira Ribas <felipe.oliveiraribas@ugent.be>"
@@ -17,13 +17,57 @@ files = "Export scenes and store simulation results"
 
 [build]
 paths = [
-  "__init__.py",
-  "sionna_worker.py",
-  "integrated_mitsuba_exporter.py",
-  "radio_map_worker.py",
-  "radio_map_3d_worker.py",
-  "result_export_worker.py",
+  "CHANGELOG.md",
+  "ISAC_DATA_DICTIONARY.md",
   "LICENSE",
-  "BLENDER_5_2_SETUP.md",
+  "PLANT_MATERIALS.md",
+  "README.md",
+  "TEST_REPORT.md",
+  "VEGETATION_METRICS.md",
+  "__init__.py",
   "assets/sionnart_geometry_nodes.blend",
+  "geometry_nodes_metadata.py",
+  "human_materials.py",
+  "integrated_mitsuba_exporter.py",
+  "isac_blender.py",
+  "isac_export.py",
+  "isac_hud.py",
+  "parameter_analysis.py",
+  "parameter_report.html",
+  "parameter_study_blender.py",
+  "path_safety.py",
+  "plant_materials.py",
+  "plant_materials_blender.py",
+  "radio_map_3d_worker.py",
+  "radio_map_worker.py",
+  "result_export_worker.py",
+  "sionna_worker.py",
+  "tests/blender_geometry_metadata.py",
+  "tests/blender_metadata_results.py",
+  "tests/blender_optional_sensing.py",
+  "tests/blender_parameter_analysis.py",
+  "tests/blender_plant_materials.py",
+  "tests/blender_release_edges.py",
+  "tests/blender_release_live.py",
+  "tests/blender_release_workflows.py",
+  "tests/blender_vegetation_metrics.py",
+  "tests/native_geometry_metadata.py",
+  "tests/native_plant_materials.py",
+  "tests/native_vegetation_metrics.py",
+  "tests/native_worker_failures.py",
+  "tests/run_release_checks.py",
+  "tests/test_geometry_nodes_metadata.py",
+  "tests/test_human_materials.py",
+  "tests/test_isac_export.py",
+  "tests/test_parameter_analysis.py",
+  "tests/test_plant_materials.py",
+  "tests/test_release_reliability.py",
+  "tests/test_report_math.cjs",
+  "tests/test_vegetation_metrics.py",
+  "tests/test_worker_runtime.py",
+  "ui_panels.py",
+  "vegetation_blender.py",
+  "vegetation_fields.py",
+  "vegetation_metrics.py",
+  "worker_runtime.py"
 ]
