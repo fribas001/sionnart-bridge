@@ -1,0 +1,93 @@
+{
+  "version": "2.0.0",
+  "date": "2026-09-29",
+  "scope": "Local Windows/CUDA verification; native checks are not run by portable GitHub CI",
+  "checks": [
+    {
+      "name": "python_tests",
+      "returncode": 0,
+      "seconds": 1.44
+    },
+    {
+      "name": "report_js",
+      "returncode": 0,
+      "seconds": 0.09
+    },
+    {
+      "name": "geometry_metadata",
+      "returncode": 0,
+      "seconds": 1.92
+    },
+    {
+      "name": "native_metadata",
+      "returncode": 0,
+      "seconds": 10.28
+    },
+    {
+      "name": "result_import",
+      "returncode": 0,
+      "seconds": 1.64
+    },
+    {
+      "name": "parameter_analysis",
+      "returncode": 0,
+      "seconds": 1.8
+    },
+    {
+      "name": "plant_materials",
+      "returncode": 0,
+      "seconds": 1.81
+    },
+    {
+      "name": "native_plants",
+      "returncode": 0,
+      "seconds": 9.88
+    },
+    {
+      "name": "vegetation",
+      "returncode": 0,
+      "seconds": 1.64
+    },
+    {
+      "name": "native_vegetation",
+      "returncode": 0,
+      "seconds": 3.94
+    },
+    {
+      "name": "workflows",
+      "returncode": 0,
+      "seconds": 32.42
+    },
+    {
+      "name": "edge_cases",
+      "returncode": 0,
+      "seconds": 11.17
+    },
+    {
+      "name": "live_updates",
+      "returncode": 0,
+      "seconds": 19.62
+    },
+    {
+      "name": "optional_sensing",
+      "returncode": 0,
+      "seconds": 7.08
+    },
+    {
+      "name": "native_failures",
+      "returncode": 0,
+      "seconds": 4.17
+    }
+  ],
+  "native_test_archive_sha256": "31ab83dead2826bb3ac0370d4cbddc5bd585a20048c795e1748485408929b33b",
+  "archive_sha256": "4476e890032c2390b0cc08e1d50fe9d0d299c8d181a5f0c183a6ab5c2d5d016f",
+  "archive_bytes": 1965001,
+  "packaging_equivalence": "Canonical text encoding and deterministic ZIP timestamps; runtime Python syntax trees and binary asset match the fully tested archive. The two extended integration tests were rerun successfully.",
+  "additional_checks": {
+    "repository_pytest": 6,
+    "extended_file_load_cancellation": "passed",
+    "pre_truncation_channel_statistics": "passed",
+    "manifest_and_citation": "passed",
+    "extension_archive_validation": "passed"
+  }
+}

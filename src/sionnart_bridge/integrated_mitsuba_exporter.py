@@ -24,6 +24,11 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
+if __package__:
+    from . import path_safety
+else:
+    import path_safety
+
 
 _EXPORTABLE_TYPES = {"MESH", "CURVE", "SURFACE", "FONT", "META"}
 
@@ -42,6 +47,23 @@ def _safe_token(value: str, fallback: str = "mesh") -> str:
 def _original_object(obj):
     original = getattr(obj, "original", None)
     return original if original is not None else obj
+
+
+def _fresh_evaluated_object(obj, depsgraph):
+    """Return a fresh evaluated object for the current dependency-graph state.
+
+    This is important for armature-deformed meshes: the Armature object (and a
+    root/hips bone) may keep a constant object transform while the evaluated
+    mesh vertices change every frame.  Re-resolving the original object through
+    the current depsgraph guarantees that ``to_mesh()`` sees the current pose,
+    constraints, drivers, shape keys, and modifiers instead of relying on an
+    iterator wrapper that may have been produced earlier in evaluation.
+    """
+    source = _original_object(obj)
+    try:
+        return source.evaluated_get(depsgraph)
+    except Exception:
+        return obj
 
 
 def _object_pointer(obj):
@@ -98,7 +120,7 @@ def _material_for_index(mesh, material_index: int):
 def _write_binary_ply(path: Path, vertices, faces) -> None:
     """Write a compact binary little-endian triangular PLY accepted by Mitsuba."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path_safety.validate_path_budget(path, purpose="PLY mesh export")
     header = (
         "ply\n"
         "format binary_little_endian 1.0\n"
@@ -112,14 +134,27 @@ def _write_binary_ply(path: Path, vertices, faces) -> None:
         "end_header\n"
     ).encode("ascii")
 
-    with path.open("wb") as handle:
-        handle.write(header)
-        pack_vertex = struct.Struct("<fff").pack
-        for x, y, z in vertices:
-            handle.write(pack_vertex(float(x), float(y), float(z)))
-        pack_face = struct.Struct("<Biii").pack
-        for a, b, c in faces:
-            handle.write(pack_face(3, int(a), int(b), int(c)))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as handle:
+            handle.write(header)
+            pack_vertex = struct.Struct("<fff").pack
+            for x, y, z in vertices:
+                handle.write(pack_vertex(float(x), float(y), float(z)))
+            pack_face = struct.Struct("<Biii").pack
+            for a, b, c in faces:
+                handle.write(pack_face(3, int(a), int(b), int(c)))
+    except OSError as exc:
+        # FileNotFoundError can mean an overlong path, not an absent source mesh.
+        # Preserve errno/cause; do not silently drop the failed geometry.
+        raise OSError(
+            exc.errno,
+            f"Could not write exported PLY mesh ({path_safety.windows_path_units(path)} "
+            f"UTF-16 path units, parent_exists={path.parent.is_dir()}). "
+            f"Check the Results folder/workspace length, permissions and available disk. "
+            f"Original error: {exc}",
+            str(path),
+        ) from exc
 
 
 def _mesh_parts(mesh, matrix_world):
@@ -177,7 +212,7 @@ def _placeholder_bsdf(material_id: str) -> ET.Element:
     return bsdf
 
 
-def export_scene(context, xml_path, export_objects, *, progress_callback=None):
+def export_scene(context, xml_path, export_objects, *, progress_callback=None, asset_prefix=""):
     """Export ``export_objects`` as a Mitsuba XML/PLY package.
 
     Returns a dictionary with ``shape_count``, ``material_ids`` and diagnostic
@@ -188,11 +223,24 @@ def export_scene(context, xml_path, export_objects, *, progress_callback=None):
     import bpy
 
     xml_path = Path(xml_path)
-    xml_path.parent.mkdir(parents=True, exist_ok=True)
+    path_safety.validate_path_budget(xml_path, purpose="Mitsuba scene XML")
     mesh_dir = xml_path.parent / "meshes"
+    # Check before creating directories or walking the evaluated dependency graph.
+    path_safety.mesh_asset_filename(mesh_dir, "mesh", 0, prefix=asset_prefix)
+    xml_path.parent.mkdir(parents=True, exist_ok=True)
     mesh_dir.mkdir(parents=True, exist_ok=True)
 
     selected_pointers = {_object_pointer(obj) for obj in export_objects}
+
+    # Force the current Blender frame through the view layer before resolving
+    # evaluated objects.  Armature animation often changes only pose-bone
+    # matrices and deformed vertex coordinates, not the Armature object's own
+    # location.  Sionna must therefore consume the evaluated mesh surface, not
+    # object/root transforms.
+    try:
+        context.view_layer.update()
+    except Exception:
+        pass
     depsgraph = context.evaluated_depsgraph_get()
     try:
         depsgraph.update()
@@ -210,7 +258,10 @@ def export_scene(context, xml_path, export_objects, *, progress_callback=None):
     # ``depsgraph.object_instances`` with ``list(...)`` or retain an instance
     # wrapper beyond the current iteration. Count in a separate pass, then copy
     # the few values we need before calling any API that could trigger evaluation.
+    asset_name_map = []
     filename_counts = defaultdict(int)
+    # Keep legacy XML shape identities; only filesystem asset names are shortened.
+    xml_asset_prefix = _safe_token(asset_prefix, "frame") + "_" if asset_prefix else ""
     try:
         total = max(1, sum(1 for _ in depsgraph.object_instances))
     except Exception:
@@ -225,14 +276,29 @@ def export_scene(context, xml_path, export_objects, *, progress_callback=None):
         # Snapshot all data that belongs to the temporary iterator item while it
         # is still alive. ``matrix_world.copy()`` is especially important: the
         # RNA-backed matrix must not outlive DepsgraphObjectInstance either.
-        evaluated_obj = getattr(instance, "object", None)
-        if evaluated_obj is None:
+        instance_obj = getattr(instance, "object", None)
+        if instance_obj is None:
             continue
+        is_instance = bool(getattr(instance, "is_instance", False))
+
+        # Normal objects are explicitly re-resolved from their original ID in
+        # the current depsgraph.  This is the armature-safe path: the returned
+        # mesh contains the actual posed/deformed vertices for this frame.
+        # Generated/collection instances keep the iterator's evaluated object
+        # because their unique placement comes from instance.matrix_world.
+        evaluated_obj = (
+            instance_obj if is_instance
+            else _fresh_evaluated_object(instance_obj, depsgraph)
+        )
+
         try:
-            matrix_world = instance.matrix_world.copy()
+            matrix_world = (
+                instance.matrix_world.copy()
+                if is_instance
+                else evaluated_obj.matrix_world.copy()
+            )
         except Exception:
             matrix_world = evaluated_obj.matrix_world.copy()
-        is_instance = bool(getattr(instance, "is_instance", False))
 
         if bool(getattr(evaluated_obj, "hide_render", False)):
             continue
@@ -265,13 +331,23 @@ def export_scene(context, xml_path, export_objects, *, progress_callback=None):
                     root.append(_placeholder_bsdf(material_id))
                     emitted_material_ids.add(material_id)
 
+                filename = path_safety.mesh_asset_filename(
+                    mesh_dir, f"{object_name}-{material_name}", shape_count,
+                    prefix=asset_prefix,
+                )
                 base = _safe_token(f"{object_name}-{material_name}")
                 collision_index = filename_counts[base]
                 filename_counts[base] += 1
                 if collision_index:
                     base = f"{base}-{collision_index:04d}"
-                filename = f"{base}.ply"
+                base = f"{xml_asset_prefix}{base}"
                 _write_binary_ply(mesh_dir / filename, vertices, faces)
+                asset_name_map.append({"filename": f"meshes/{filename}",
+                                       "object_name": object_name,
+                                       "material_name": material_name,
+                                       "part_index": part_index,
+                                       "shape_index": shape_count,
+                                       "shape_id": f"mesh-{_safe_token(base, 'shape')}-{shape_count:06d}"})
 
                 shape = ET.SubElement(
                     root,
@@ -324,6 +400,7 @@ def export_scene(context, xml_path, export_objects, *, progress_callback=None):
 
     return {
         "shape_count": shape_count,
+        "asset_name_map": asset_name_map,
         "material_ids": sorted(emitted_material_ids),
         "skipped_objects": skipped_objects,
         "emitted_instances": emitted_instances,

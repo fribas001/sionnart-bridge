@@ -34,10 +34,22 @@ from bpy.props import (
 )
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.app.handlers import persistent
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 
-_ADDON_VERSION = "1.8.2"
+from . import path_safety as _path_safety
+from . import isac_blender as _isac_blender
+from . import isac_hud as _isac_hud
+from . import human_materials as _human_materials
+from . import geometry_nodes_metadata as _geometry_nodes_metadata
+from . import plant_materials as _plant_materials
+from . import plant_materials_blender as _plant_blender
+from . import parameter_analysis as _parameter_analysis
+from . import parameter_study_blender as _parameter_study
+from . import vegetation_blender as _vegetation
+from bpy_extras.io_utils import ImportHelper
+
+_ADDON_VERSION = "2.0.0"
 
 _ENV_COLLECTION = "sionna_env"
 _SCENE_COLLECTION = "scene"
@@ -60,6 +72,7 @@ _DEVICE_ID_PROPERTY = "sionna_device_id"
 _PATHS_COLLECTION = "simulated_paths"
 _RADIO_MAPS_COLLECTION = "radio_maps"
 _RADIO_MAPS_3D_COLLECTION = "radio_maps_3d"
+
 _LEGACY_RESULT_COLLECTION = "Sionna Results"
 _RESULT_COLLECTION = _PATHS_COLLECTION
 _DEFAULT_GEOMETRY_NODES_GROUP = "Sionna_Paths"
@@ -567,6 +580,11 @@ def _sync_role_device_names(scene, settings, role):
     return count
 
 # Process state is intentionally not stored in the .blend file.
+
+# The cache maps a source object's POINT-domain frame/id attributes to source
+# point indices. It is rebuilt when the source/mapping changes and is never
+# serialized into the .blend file.
+
 _RUN_STATE = {
     "process": None,
     "log_handle": None,
@@ -616,6 +634,7 @@ _RADIO_MAP_3D_STATE = {
     "auto_triggered": False,
 }
 
+
 # Coordinates the single Run Simulation button. When multiple outputs are enabled,
 # propagation paths run first, then the 2D map, then the 3D map.
 _BATCH_STATE = {
@@ -633,6 +652,7 @@ _BATCH_STATE = {
     "force_current_frame": False,
     "auto_anchor_tx_name": "",
     "export_bundle": {},
+        "had_errors": False,
 }
 
 # Debounced, latest-state-wins recomputation driven by TX/RX transforms.
@@ -665,18 +685,51 @@ def _reset_batch_state():
         "force_current_frame": False,
         "auto_anchor_tx_name": "",
         "export_bundle": {},
+        "had_errors": False,
     })
 
 
 def _processes_idle():
-    path_process = _RUN_STATE.get("process")
-    map_process = _RADIO_MAP_STATE.get("process")
-    map_3d_process = _RADIO_MAP_3D_STATE.get("process")
-    return (
-        (path_process is None or path_process.poll() is not None)
-        and (map_process is None or map_process.poll() is not None)
-        and (map_3d_process is None or map_3d_process.poll() is not None)
-    )
+    # A completed process remains owned until its results are imported.
+    return all(state.get("process") is None for state in
+               (_RUN_STATE, _RADIO_MAP_STATE, _RADIO_MAP_3D_STATE))
+
+
+def _cancel_active_runs(reason="Cancelled by user"):
+    """Stop this add-on's workers, retain partial files, and clear ownership."""
+    stopped = 0
+    for state, close, poll in (
+        (_RUN_STATE, _close_run_handles, _poll_sionna_process),
+        (_RADIO_MAP_STATE, _close_radio_map_handles, _poll_radio_map_process),
+        (_RADIO_MAP_3D_STATE, _close_radio_map_3d_handles, _poll_radio_map_3d_process),
+    ):
+        process = state.get("process")
+        if process is None:
+            continue
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        run_dir = state.get("run_dir")
+        if run_dir:
+            from .worker_runtime import write_status_json
+            write_status_json(Path(run_dir) / "status.json", {
+                "state": "cancelled", "updated_utc": _now_utc(), "error": reason,
+            })
+        if bpy.app.timers.is_registered(poll):
+            bpy.app.timers.unregister(poll)
+        close()
+        stopped += 1
+    _reset_batch_state()
+    return stopped
+
+
+@persistent
+def _cancel_runs_before_load(_dummy):
+    _cancel_active_runs("Stopped before loading another Blender file")
 
 
 def _addon_dir():
@@ -774,7 +827,6 @@ def _collection_objects_recursive(collection):
 
     visit(collection)
     return objects
-
 
 
 _DEVICE_REPRESENTATION_SYNC_PENDING = False
@@ -1465,6 +1517,8 @@ def _auto_path_depsgraph_update(scene, depsgraph):
         obj = getattr(update, "id", None)
         if not isinstance(obj, bpy.types.Object):
             continue
+        # Dependency updates use evaluated IDs; baseline keys use original IDs.
+        obj = getattr(obj, "original", None) or obj
         if not bool(getattr(update, "is_updated_transform", False)):
             continue
         # Moving a generated grid/anchor is equivalent to moving its associated
@@ -1628,6 +1682,7 @@ def _find_environment(scene):
     simulated_paths = _collection_child(env, _PATHS_COLLECTION)
     radio_maps = _collection_child(env, _RADIO_MAPS_COLLECTION)
     radio_maps_3d = _collection_child(env, _RADIO_MAPS_3D_COLLECTION)
+    # call _ensure_environment(), which creates/repairs this collection.
     txs = _collection_child(devices, _TX_COLLECTION) if devices else None
     rxs = _collection_child(devices, _RX_COLLECTION) if devices else None
     if not all((scene_collection, procedural_geometry, devices, simulated_paths, radio_maps, radio_maps_3d, txs, rxs)):
@@ -1765,7 +1820,7 @@ def _procedural_scene_objects(scene):
 
 def _procedural_scene_active(scene):
     settings = scene.sionna_bridge
-    return bool(settings.procedural_geometry_enabled and _procedural_scene_objects(scene))
+    return bool((settings.isac_enabled) or (settings.procedural_geometry_enabled and _procedural_scene_objects(scene)))
 
 
 def _evaluated_procedural_geometry_stats(context, depsgraph=None):
@@ -2348,7 +2403,6 @@ def _sionna_worker_environment(settings, python_executable=None):
     return env, libllvm
 
 
-
 def _pid_is_running(pid):
     try:
         pid = int(pid)
@@ -2869,7 +2923,7 @@ def _apply_pointcloud_motion_for_device(scene, device, depsgraph=None):
 
 @persistent
 def _pointcloud_motion_frame_change(scene, depsgraph=None):
-    """Live frame -> PointCloud index follower. Runs only on frame changes."""
+    """Update devices following a PointCloud motion path."""
     if scene is None:
         return
     for device in _pointcloud_motion_devices(scene):
@@ -2889,7 +2943,10 @@ def _sync_pointcloud_motion_handler():
     scenes = getattr(bpy.data, "scenes", None)
     if scenes is not None:
         try:
-            need_handler = any(_pointcloud_motion_devices(scene) for scene in scenes)
+            need_handler = any(
+                _pointcloud_motion_devices(scene)
+                for scene in scenes
+            )
         except (AttributeError, ReferenceError):
             need_handler = False
 
@@ -3154,6 +3211,9 @@ def _ensure_default_sionna_materials():
         if config is not None and not config.configured:
             _configure_material_defaults(material, itu_type)
             configured += 1
+    plant_created, plant_configured = _plant_blender.ensure_library(sys.modules[__name__])
+    created += plant_created
+    configured += plant_configured
     _representation_materials, representation_created = _ensure_device_representation_materials()
     return created + representation_created, configured
 
@@ -3180,28 +3240,53 @@ def _configured_material_from_export_id(value):
     return max(candidates, default=(0, None), key=lambda item: item[0])[1]
 
 
-def _used_sionna_materials(scene):
+def _used_sionna_materials(scene, depsgraph=None):
     workflow = _find_environment(scene)
     if not workflow:
         return []
     result = []
     seen = set()
-    for obj in _collection_objects_recursive(workflow["scene"]):
-        data = getattr(obj, "data", None)
-        materials = getattr(data, "materials", None)
-        if materials is None:
+    sources = list(_collection_objects_recursive(workflow["scene"]))
+    # Match the exporter's evaluated surfaces and instance scope. Unused slots
+    # and original materials replaced by GN must not require XML placeholders.
+    if depsgraph is None and bpy.context.scene == scene:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+    candidates = sources
+    if depsgraph is not None:
+        exporter = _integrated_exporter_module()
+        pointers = {exporter._object_pointer(obj) for obj in sources}
+        candidates = [instance.object for instance in depsgraph.object_instances
+                      if exporter._instance_is_selected(instance, pointers)]
+    visited_objects = set()
+    for candidate in candidates:
+        if candidate.as_pointer() in visited_objects or candidate.hide_render:
             continue
-        for material in materials:
-            if material is None or not _material_is_sionna(material):
-                continue
-            pointer = material.as_pointer()
-            if pointer not in seen:
-                seen.add(pointer)
-                result.append(material)
+        visited_objects.add(candidate.as_pointer())
+        if candidate.type not in {"MESH", "CURVE", "SURFACE", "FONT", "META"}:
+            continue
+        mesh = None
+        try:
+            mesh = candidate.to_mesh(preserve_all_data_layers=False, depsgraph=depsgraph) if depsgraph is not None else candidate.data
+            materials = getattr(mesh, "materials", ())
+            indices = {int(poly.material_index) for poly in getattr(mesh, "polygons", ())}
+            for index in sorted(indices):
+                material = materials[index] if 0 <= index < len(materials) else None
+                if material is None:
+                    continue
+                material = getattr(material, "original", material)
+                if not _material_is_sionna(material):
+                    continue
+                pointer = material.as_pointer()
+                if pointer not in seen:
+                    seen.add(pointer)
+                    result.append(material)
+        finally:
+            if mesh is not None and depsgraph is not None:
+                candidate.to_mesh_clear()
     return sorted(result, key=lambda item: item.name.lower())
 
 
-def _material_payload(material):
+def _material_payload(material, frequency_hz=26e9):
     config = getattr(material, "sionna_radio", None)
     inferred_itu = _material_slug(material.name)
     if inferred_itu not in _ITU_MATERIAL_DEFINITIONS:
@@ -3226,11 +3311,12 @@ def _material_payload(material):
             "backscatter_lambda": 1.0,
             "color": [float(v) for v in material.diffuse_color[:3]],
         }
-    return {
+    payload = {
         "blender_name": material.name,
         "source_name": _material_source_name(material),
         "runtime_name": _material_runtime_name(material),
         "model": str(config.model),
+        "tissue_reference": ({"source": material.get("isac_tissue_source"), "preset": material.get("isac_tissue_preset"), "frequency_hz": material.get("isac_reference_frequency_hz")} if material.get("isac_tissue_source") else None),
         "itu_type": str(config.itu_type),
         "thickness": float(config.thickness),
         "relative_permittivity": float(config.relative_permittivity),
@@ -3245,16 +3331,27 @@ def _material_payload(material):
         "color": [float(v) for v in material.diffuse_color[:3]],
     }
 
+    if config.model == "VEGETATION":
+        payload["plant_model"] = str(config.plant_model)
+        payload["plant_library_preset"] = material.get("plant_library_preset", "")
+        er, sigma = _plant_materials.dielectric(config.plant_model, frequency_hz)
+        payload["relative_permittivity"] = er
+        payload["conductivity"] = sigma
+        payload["plant_reference"] = _plant_materials.reference(config.plant_model, frequency_hz, payload)
+    return payload
 
-def _material_payloads(scene):
-    return [_material_payload(material) for material in _used_sionna_materials(scene)]
+
+def _material_payloads(scene, depsgraph=None, frequency_hz=None):
+    if frequency_hz is None:
+        frequency_hz = float(scene.sionna_bridge.frequency_ghz) * 1e9
+    return [_material_payload(material, frequency_hz) for material in _used_sionna_materials(scene, depsgraph)]
 
 
 def _material_parameter_signature(scene):
     signature = []
     for payload in _material_payloads(scene):
         signature.extend((
-            payload["blender_name"], payload["model"], payload["itu_type"],
+            payload["blender_name"], payload["model"], payload["itu_type"], payload.get("plant_model", ""),
             payload["thickness"], payload["relative_permittivity"],
             payload["conductivity"], payload["scattering_coefficient"],
             payload["xpd_coefficient"], payload["scattering_pattern"],
@@ -3479,7 +3576,6 @@ def _new_versioned_cache_dir(base_dir, *, kind="cache"):
         candidate = base_dir.parent / f"{stem}_{suffix:02d}"
         suffix += 1
     return candidate
-
 
 
 _TILE_SPATIAL_DATASET_OBJECT = "Tile_spacial_dataset"
@@ -3768,7 +3864,7 @@ def _make_run_dir(settings):
     return candidate
 
 
-def _export_scene_package(context, xml_path, export_objects):
+def _export_scene_package(context, xml_path, export_objects, *, asset_prefix=""):
     """Export the evaluated Blender scene using the bundled Blender 5 exporter."""
     xml_path = Path(xml_path)
     xml_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3793,12 +3889,20 @@ def _export_scene_package(context, xml_path, export_objects):
             xml_path,
             export_objects,
             progress_callback=progress,
+            asset_prefix=asset_prefix,
         )
     finally:
         wm.progress_end()
 
     if not xml_path.exists():
         raise RuntimeError(f"Integrated scene export did not create {xml_path}")
+    # Preserve readable Blender identities while using short native asset names.
+    name_map_path = xml_path.with_name(xml_path.stem + ".assets.json")
+    _path_safety.validate_path_budget(name_map_path, purpose="scene asset-name map")
+    with name_map_path.open("w", encoding="utf-8") as handle:
+        json.dump({"schema": "sionnart.scene_assets/1",
+                   "scene_xml": xml_path.name,
+                   "assets": result.get("asset_name_map", [])}, handle, indent=2)
     shape_count, radio_material_ids = _patch_xml_to_radio_materials(xml_path)
     if int(result.get("shape_count", shape_count)) != shape_count:
         raise RuntimeError(
@@ -3910,11 +4014,13 @@ def _export_procedural_scene_frames(context, frames):
     """Export one evaluated scene per frame, optionally skipping bad frames."""
     settings = context.scene.sionna_bridge
     procedural_objects = _procedural_scene_objects(context.scene)
-    if not procedural_objects:
+    if not procedural_objects and not (settings.isac_enabled):
         raise RuntimeError(
             "Procedural Geometry is enabled, but sionna_env/scene/procedural_geometry is empty"
         )
     export_objects = _scene_export_objects(context.scene)
+    if settings.isac_enabled and settings.isac_capture_pose:
+        _isac_blender.validate_subject(context.scene, export_objects)
     cache_dir = _procedural_scene_cache_dir(settings)
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
     temp_dir = Path(tempfile.mkdtemp(
@@ -3929,15 +4035,33 @@ def _export_procedural_scene_frames(context, frames):
     total_shapes = 0
     try:
         for index, frame in enumerate(requested_frames, start=1):
-            context.scene.frame_set(frame)
-            context.view_layer.update()
+            # Evaluate the full dependency graph at the requested frame before
+            # taking the Sionna geometry snapshot.  This deliberately does not
+            # inspect Armature/root/hips object locations: in-place and Mixamo
+            # animations can keep those transforms constant while the actual
+            # skinned mesh surface changes.
+            context.scene.frame_set(frame, subframe=0.0)
+            try:
+                context.view_layer.update()
+            except Exception:
+                pass
+            try:
+                depsgraph = context.evaluated_depsgraph_get()
+                depsgraph.update()
+            except Exception:
+                depsgraph = None
             frame_dir = temp_dir / f"F{_frame_token(frame)}"
             xml_path = frame_dir / "scene.xml"
             settings.last_status = (
                 f"Exporting procedural scene frame {index}/{len(requested_frames)} (F{frame})"
             )
             try:
-                shape_count, _ = _export_scene_package(context, xml_path, export_objects)
+                if settings.isac_enabled and settings.isac_capture_pose:
+                    _isac_blender.validate_subject(context.scene, export_objects)
+                shape_count, _ = _export_scene_package(
+                    context, xml_path, export_objects,
+                    asset_prefix=f"F{_frame_token(frame)}_",
+                )
                 total_shapes += int(shape_count)
                 result[frame] = xml_path
             except Exception as exc:
@@ -4103,11 +4227,12 @@ def _frame_range(scene, step):
 
 
 def _device_position_signature(context, devices):
-    """Signature of animated device position, orientation, and look-at target."""
+    """Signature of position, orientation, look-at and per-device transmit power."""
     depsgraph = context.evaluated_depsgraph_get()
     signature = []
     for obj in devices:
         payload = _device_payload(obj, depsgraph)
+        signature.append(float(payload.get("power_dbm", 0.0)))
         signature.extend(float(value) for value in payload["position"])
         signature.extend(float(value) for value in payload["orientation_sionna_rad"])
         target = payload.get("look_at_target_position")
@@ -4116,6 +4241,10 @@ def _device_position_signature(context, devices):
         else:
             signature.extend((0.0, 0.0, 0.0))
     return tuple(signature)
+
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 
 def _evaluated_bridge_settings(context):
@@ -4151,6 +4280,7 @@ def _simulation_settings_payload(settings):
         "max_num_paths_per_src": int(settings.max_num_paths_per_src),
         "samples_per_src": int(settings.samples_per_src),
         "synthetic_array": True,
+        "deterministic": bool(settings.deterministic_paths),
         "los": bool(settings.enable_los),
         "specular_reflection": bool(settings.enable_reflection),
         "diffuse_reflection": bool(settings.enable_diffuse),
@@ -4183,6 +4313,7 @@ def _simulation_parameter_signature(settings):
         "seed",
         "sim_numeric_id",
         "mobility_doppler",
+        "deterministic",
     ))
 
 
@@ -4204,7 +4335,7 @@ def _timeline_change_reasons(context, devices, frames):
             scene.frame_set(frame)
             if not device_changed:
                 current_devices = _device_position_signature(context, devices)
-                device_changed = any(
+                device_changed = len(baseline_devices) != len(current_devices) or any(
                     abs(a - b) > 1e-7
                     for a, b in zip(baseline_devices, current_devices)
                 )
@@ -4339,9 +4470,22 @@ def _apply_device_velocity_payload(items, velocity_by_name, enabled):
         item["speed_m_s"] = math.sqrt(sum(value * value for value in velocity))
 
 
+def _write_geometry_nodes_metadata(context, config, run_dir):
+    # Keep these opt-in records outside disposable worker directories, even
+    # when simulation result export is NONE. Use the sampled configuration,
+    # not a checkbox that could change while a worker is running.
+    directory = _workspace(context.scene.sionna_bridge) / "geometry_nodes_metadata" / run_dir.name
+    descriptor = _geometry_nodes_metadata.write_run(config, directory)
+    if descriptor is not None:
+        context.scene.sionna_bridge.last_geometry_nodes_metadata_path = descriptor["manifest_json"]
+
+
 def _sample_frame_payloads(context, frames, transmitters, receivers):
     scene = context.scene
     original = int(scene.frame_current)
+    original_subframe = float(scene.frame_subframe)
+    export_nodes = bool(scene.sionna_bridge.export_geometry_nodes_metadata)
+    analyze_parameters = bool(scene.sionna_bridge.parameter_analysis_enabled)
     payloads = []
     devices = list(transmitters) + list(receivers)
     velocity_cache, timeline_fps = _device_animation_velocity_cache(
@@ -4362,8 +4506,14 @@ def _sample_frame_payloads(context, frames, transmitters, receivers):
             simulation = _simulation_settings_payload(_evaluated_bridge_settings(context))
             simulation["timeline_fps"] = float(timeline_fps)
             simulation["mobility_velocity_method"] = "adjacent_blender_frames"
-            tx_payloads = [_device_payload(obj, depsgraph) for obj in transmitters]
-            rx_payloads = [_device_payload(obj, depsgraph) for obj in receivers]
+            active_transmitters = [
+                obj for obj in transmitters
+            ]
+            active_receivers = [
+                obj for obj in receivers
+            ]
+            tx_payloads = [_device_payload(obj, depsgraph) for obj in active_transmitters]
+            rx_payloads = [_device_payload(obj, depsgraph) for obj in active_receivers]
             frame_velocities = velocity_cache.get(int(frame), {})
             mobility_enabled = bool(simulation.get("mobility_doppler", True))
             _apply_device_velocity_payload(tx_payloads, frame_velocities, mobility_enabled)
@@ -4374,14 +4524,25 @@ def _sample_frame_payloads(context, frames, transmitters, receivers):
                 "simulation": simulation,
                 "transmitters": tx_payloads,
                 "receivers": rx_payloads,
-                "materials": _material_payloads(scene),
+                "materials": _material_payloads(scene, depsgraph, simulation["frequency_hz"]),
             }
+            if scene.sionna_bridge.isac_enabled:
+                payload["isac_ground_truth"] = _isac_blender.capture(context)
             procedural_stats = _procedural_stats_for_payload(context, depsgraph)
             if procedural_stats is not None:
                 payload["procedural_geometry_stats"] = procedural_stats
+            _vegetation.capture_payload(sys.modules[__name__], context, depsgraph, payload)
+            if export_nodes or analyze_parameters:
+                snapshot = _geometry_nodes_metadata.capture(
+                    context, _find_environment(scene)["scene"], depsgraph
+                )
+                if export_nodes:
+                    payload["geometry_nodes_parameters"] = snapshot
+                if analyze_parameters:
+                    payload["parameter_study_inputs"] = _parameter_analysis.frame_inputs(payload, snapshot)
             payloads.append(payload)
     finally:
-        scene.frame_set(original)
+        scene.frame_set(original, subframe=original_subframe)
     return payloads
 
 
@@ -4400,11 +4561,16 @@ def _build_run_package(context, scene_source, *, force_current_frame=False):
         frame_reason = "current frame (automatic device-move recompute)"
     else:
         frames, frame_reason = _simulation_frames(context, devices)
+    if settings.isac_enabled and not isinstance(scene_source, dict):
+        scene_source = _export_procedural_scene_frames(context, frames)
     frame_payloads = _sample_frame_payloads(
         context, frames, transmitters, receivers
     )
     _attach_scene_sources(frame_payloads, scene_source)
     run_dir = _make_run_dir(settings)
+    if settings.isac_enabled:
+        _isac_blender.stage_scenes(frame_payloads, run_dir)
+        settings.isac_last_run_dir = str(run_dir)
     config_path = run_dir / "sionna_config.json"
     created_utc = _now_utc()
     export_spec = _export_output_spec(settings, run_dir, "paths", created_utc)
@@ -4421,6 +4587,7 @@ def _build_run_package(context, scene_source, *, force_current_frame=False):
 
     first_scene_xml = Path(frame_payloads[0]["scene_xml"])
     config = {
+        "isac": {"enabled": settings.isac_enabled, "plots": settings.isac_plots, "csv": settings.isac_csv, "csi": settings.isac_csi, "csi_bins": settings.isac_csi_bins, "subject_id": settings.isac_subject_id, "episode_id": settings.isac_episode_id, "environment_id": settings.isac_environment_id, "license": settings.isac_license},
         "schema_version": 6,
         "bridge_version": _ADDON_VERSION,
         "created_utc": created_utc,
@@ -4450,11 +4617,12 @@ def _build_run_package(context, scene_source, *, force_current_frame=False):
             "frames_manifest_json": str(run_dir / "frames_manifest.json"),
             "results_csv": str(run_dir / "paths_all_frames.csv"),
             "top_paths_per_pair": int(settings.pointcloud_top_paths_per_pair),
-            "keep_external_results": settings.export_format == "HDF5" or settings.post_run_action == "CURVES",
+            "keep_external_results": settings.isac_enabled or settings.export_format == "HDF5" or settings.post_run_action == "CURVES",
             **export_spec,
         },
     }
 
+    _write_geometry_nodes_metadata(context, config, run_dir)
     with open(config_path, "w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
 
@@ -4565,8 +4733,6 @@ def _close_run_handles():
     _RUN_STATE["pid"] = 0
     _RUN_STATE["lock_path"] = ""
     _RUN_STATE["auto_triggered"] = False
-
-
 
 
 def _make_radio_map_run_dir(settings):
@@ -4936,6 +5102,8 @@ def _sample_radio_map_frame_payloads(
 ):
     scene = context.scene
     original = int(scene.frame_current)
+    original_subframe = float(scene.frame_subframe)
+    export_nodes = bool(scene.sionna_bridge.export_geometry_nodes_metadata)
     payloads = []
     try:
         for frame in frames:
@@ -4946,6 +5114,7 @@ def _sample_radio_map_frame_payloads(
                 depsgraph.update()
             except Exception:
                 pass
+            simulation = _simulation_settings_payload(settings)
             radio_map_payload = _radio_map_settings_payload(settings)
             if (
                 auto_center_tx_name
@@ -4959,16 +5128,20 @@ def _sample_radio_map_frame_payloads(
                 )
             payload = {
                 "frame": int(frame),
-                "simulation": _simulation_settings_payload(settings),
+                "time_seconds": (int(frame) - int(scene.frame_start)) / max(1e-9, _scene_frame_rate(scene)),
+                "simulation": simulation,
                 "radio_map": radio_map_payload,
                 "transmitters": [
-                    _device_payload(obj, depsgraph) for obj in transmitters
+                    _device_payload(obj, depsgraph)
+                    for obj in transmitters
+
                 ],
-                "materials": _material_payloads(scene),
+                "materials": _material_payloads(scene, depsgraph, simulation["frequency_hz"]),
             }
             procedural_stats = _procedural_stats_for_payload(context, depsgraph)
             if procedural_stats is not None:
                 payload["procedural_geometry_stats"] = procedural_stats
+            _vegetation.capture_payload(sys.modules[__name__], context, depsgraph, payload)
             if payload["radio_map"].get("surface_mode") == "PROJECTED":
                 reference_obj = _radio_map_reference_mesh_object(settings)
                 payload["radio_map"].update(
@@ -4976,9 +5149,13 @@ def _sample_radio_map_frame_payloads(
                         context, reference_obj, frame, run_dir, depsgraph=depsgraph
                     )
                 )
+            if export_nodes:
+                payload["geometry_nodes_parameters"] = _geometry_nodes_metadata.capture(
+                    context, _find_environment(scene)["scene"], depsgraph
+                )
             payloads.append(payload)
     finally:
-        scene.frame_set(original)
+        scene.frame_set(original, subframe=original_subframe)
     return payloads
 
 
@@ -5059,6 +5236,7 @@ def _build_radio_map_package(
     tile_snapshot = _snapshot_tile_spatial_dataset(run_dir, settings)
     if tile_snapshot is not None:
         config["tile_spatial_dataset"] = tile_snapshot
+    _write_geometry_nodes_metadata(context, config, run_dir)
     with open(config_path, "w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
 
@@ -5166,7 +5344,6 @@ def _close_radio_map_handles():
     _RADIO_MAP_STATE["auto_triggered"] = False
 
 
-
 def _make_radio_map_3d_run_dir(settings):
     workspace = _workspace(settings)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -5264,6 +5441,8 @@ def _sample_radio_map_3d_frame_payloads(
 ):
     scene = context.scene
     original = int(scene.frame_current)
+    original_subframe = float(scene.frame_subframe)
+    export_nodes = bool(scene.sionna_bridge.export_geometry_nodes_metadata)
     payloads = []
     try:
         for frame in frames:
@@ -5274,6 +5453,7 @@ def _sample_radio_map_3d_frame_payloads(
                 depsgraph.update()
             except Exception:
                 pass
+            simulation = _simulation_settings_payload(settings)
             radio_map_3d_payload = _radio_map_3d_settings_payload(settings)
             if (
                 auto_center_tx_name
@@ -5284,17 +5464,27 @@ def _sample_radio_map_3d_frame_payloads(
                 )
             payload = {
                 "frame": int(frame),
-                "simulation": _simulation_settings_payload(settings),
+                "time_seconds": (int(frame) - int(scene.frame_start)) / max(1e-9, _scene_frame_rate(scene)),
+                "simulation": simulation,
                 "radio_map_3d": radio_map_3d_payload,
-                "transmitters": [_device_payload(obj, depsgraph) for obj in transmitters],
-                "materials": _material_payloads(scene),
+                "transmitters": [
+                    _device_payload(obj, depsgraph)
+                    for obj in transmitters
+
+                ],
+                "materials": _material_payloads(scene, depsgraph, simulation["frequency_hz"]),
             }
             procedural_stats = _procedural_stats_for_payload(context, depsgraph)
             if procedural_stats is not None:
                 payload["procedural_geometry_stats"] = procedural_stats
+            _vegetation.capture_payload(sys.modules[__name__], context, depsgraph, payload)
+            if export_nodes:
+                payload["geometry_nodes_parameters"] = _geometry_nodes_metadata.capture(
+                    context, _find_environment(scene)["scene"], depsgraph
+                )
             payloads.append(payload)
     finally:
-        scene.frame_set(original)
+        scene.frame_set(original, subframe=original_subframe)
     return payloads
 
 
@@ -5356,6 +5546,7 @@ def _build_radio_map_3d_package(
     tile_snapshot = _snapshot_tile_spatial_dataset(run_dir, settings)
     if tile_snapshot is not None:
         config["tile_spatial_dataset"] = tile_snapshot
+    _write_geometry_nodes_metadata(context, config, run_dir)
     with open(config_path, "w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
     settings.last_radio_map_3d_run_dir = str(run_dir)
@@ -5437,7 +5628,6 @@ def _close_radio_map_3d_handles():
     _RADIO_MAP_3D_STATE["pid"] = 0
     _RADIO_MAP_3D_STATE["lock_path"] = ""
     _RADIO_MAP_3D_STATE["auto_triggered"] = False
-
 
 
 def _remove_previous_auto_embedded_results(scene, collection_key):
@@ -5551,6 +5741,8 @@ def _poll_radio_map_3d_process():
     )
     success = False
     try:
+        if return_code != 0:
+            raise RuntimeError(f"Worker exited with code {return_code}; files retained for diagnosis")
         if status_payload.get("state") != "finished":
             raise RuntimeError(
                 f"worker exit {return_code}, state {status_payload.get('state', 'missing')}. "
@@ -5607,6 +5799,7 @@ def _poll_radio_map_3d_process():
             run_dir, settings, path_result=False, radio_result=False,
             radio_3d_result=True, export_file=export_file,
             export_metadata=export_metadata, export_format=export_format,
+            geometry_nodes_metadata=output_spec.get("geometry_nodes_metadata_json", ""),
         )
         settings.last_status += f"; {cleanup_note}"
         success = True
@@ -5618,13 +5811,15 @@ def _poll_radio_map_3d_process():
             run_dir=run_dir, log_path=run_dir / "radio_map_3d.log",
         )
     if _BATCH_STATE.get("active") and _BATCH_STATE.get("scene_name") == scene_name:
+        if not success:
+            _BATCH_STATE["had_errors"] = True
         statuses = [
             str(_BATCH_STATE.get("path_status") or "").strip(),
             str(_BATCH_STATE.get("radio_map_status") or "").strip(),
             settings.last_status,
         ]
         statuses = [item for item in statuses if item]
-        settings.last_status = ("Batch complete — " if success else "Batch finished with errors — ") + " | ".join(statuses)
+        settings.last_status = ("Batch complete — " if success and not _BATCH_STATE.get("had_errors") else "Batch finished with errors — ") + " | ".join(statuses)
         _reset_batch_state()
     _redraw_sionna_ui()
     return None
@@ -5643,7 +5838,6 @@ def _clear_radio_map_collection(collection):
                     bpy.data.pointclouds.remove(data)
             except Exception:
                 pass
-
 
 
 def _existing_geometry_nodes_group(requested_name, label):
@@ -5875,7 +6069,6 @@ def _ensure_radio_map_carrier(
     )
 
 
-
 _INTEGER_POINT_ATTRIBUTES = {
     "frame", "max_depth", "max_num_paths_per_src", "samples_per_src", "seed",
     "los_enabled", "specular_reflection_enabled", "diffuse_reflection_enabled",
@@ -6014,7 +6207,7 @@ def _read_csv_first_row(csv_path, attempts=8):
     return None
 
 
-def _read_csv_numeric_rows(csv_path):
+def _read_csv_numeric_rows(csv_path, *, allow_empty=False):
     csv_path = Path(csv_path).expanduser().resolve()
     last_error = None
     for attempt in range(8):
@@ -6025,7 +6218,7 @@ def _read_csv_numeric_rows(csv_path):
                 if not {"x", "y", "z"}.issubset(fieldnames):
                     raise RuntimeError(f"CSV is missing x/y/z columns: {csv_path}")
                 rows = list(reader)
-            if not rows:
+            if not rows and not allow_empty:
                 raise RuntimeError(f"CSV contains no point rows: {csv_path}")
             return fieldnames, rows
         except (PermissionError, OSError) as exc:
@@ -6046,7 +6239,7 @@ def _create_embedded_point_object(
     through Group Input and immediately converts it to a native point-cloud
     component with Mesh to Points. External files can then be deleted safely.
     """
-    fieldnames, rows = _read_csv_numeric_rows(csv_path)
+    fieldnames, rows = _read_csv_numeric_rows(csv_path, allow_empty=result_type == "paths_pointcloud")
     workflow = _ensure_environment(scene, migrate=True)
     collection = workflow[collection_key]
     group = _existing_geometry_nodes_group(group_name, result_type)
@@ -6110,6 +6303,11 @@ def _create_embedded_point_object(
     obj["sionna_point_count"] = len(rows)
     obj["sionna_source_csv"] = str(Path(csv_path).resolve())
     obj["sionna_embedded"] = True
+    metadata = config.get("geometry_nodes_metadata")
+    if metadata:
+        obj["sionna_geometry_nodes_metadata_json"] = metadata["manifest_json"]
+        obj["sionna_export_run_id"] = metadata["run_id"]
+        obj["sionna_export_category"] = metadata["simulation_category"]
     if result_type in {"radio_map_pointcloud", "radio_map_3d_pointcloud"}:
         map_key = "radio_map_3d" if result_type == "radio_map_3d_pointcloud" else "radio_map"
         map_settings = dict(config.get(map_key, {}) or {})
@@ -6242,7 +6440,6 @@ def _create_embedded_point_object(
     return obj, len(rows), group
 
 
-
 def _attach_channel_analytics_from_manifest(obj, run_dir):
     """Embed compact worker-side channel summaries before temporary cleanup."""
     manifest_path = Path(run_dir) / "frames_manifest.json"
@@ -6275,9 +6472,18 @@ def _attach_channel_analytics_from_manifest(obj, run_dir):
 def _cleanup_external_run(
     run_dir, settings, *, path_result=False, radio_result=False,
     radio_3d_result=False, export_file="", export_metadata="", export_format="",
+    geometry_nodes_metadata="",
 ):
     """Remove worker intermediates while preserving only the requested export."""
     run_dir = Path(run_dir)
+    # Dataset output is an independent opt-in, including when legacy export is NONE.
+    # Use the completed run's receipt, not mutable UI settings at import time.
+    isac_manifest = run_dir / 'isac' / 'dataset_manifest.json'
+    if path_result and isac_manifest.is_file():
+        settings.isac_last_run_dir = str(run_dir)
+        settings.last_export_path = str(isac_manifest)
+        settings.last_export_metadata_path = str(isac_manifest)
+        return 'CIR / ISAC dataset and reproducibility files retained'
     mode = str(export_format or getattr(settings, "export_format", "NONE") or "NONE").upper()
     export_file = Path(export_file) if export_file else None
     export_metadata = Path(export_metadata) if export_metadata else None
@@ -6371,10 +6577,15 @@ def _cleanup_external_run(
             elif export_file and export_file.exists():
                 settings.last_radio_map_3d_run_dir = str(export_file.parent)
 
+    if geometry_nodes_metadata and Path(geometry_nodes_metadata).is_file():
+        settings.last_geometry_nodes_metadata_path = str(geometry_nodes_metadata)
+        metadata_note = "; Geometry Nodes JSON retained"
+    else:
+        metadata_note = ""
     if mode == "NONE":
-        return "temporary worker files removed; no file export requested"
+        return "temporary worker files removed" + metadata_note
     label = "CSV" if mode == "CSV" else "HDF5"
-    return f"{label} export kept with metadata; worker intermediates removed"
+    return f"{label} export kept with metadata; worker intermediates removed" + metadata_note
 
 
 def _elapsed_label(started_ns):
@@ -6438,8 +6649,6 @@ def _read_csv_frequency_ghz(csv_path):
         raise RuntimeError("The generated radio-map CSV has no valid frequency_ghz value") from exc
 
 
-
-
 def _write_pending_csv(csv_path, columns):
     """Legacy helper. Do not connect this file while a simulation worker writes it."""
     csv_path = Path(csv_path).expanduser().resolve()
@@ -6484,7 +6693,7 @@ def _verify_fresh_file(path, started_ns, label):
 def _completed_status_with_recovery(config_path, status_path, results_csv, started_ns, label):
     """Return a finished status, recovering it from a verified manifest if needed."""
     status = _load_json_file(status_path, attempts=10)
-    if status.get("state") == "finished":
+    if status.get("state") in {"finished", "failed", "cancelled"}:
         return status
     config = _load_json_file(config_path, attempts=6)
     output = config.get("output", {}) if isinstance(config, dict) else {}
@@ -6525,8 +6734,6 @@ def _verify_path_output(csv_path, config_path, status_path, started_ns):
         raise RuntimeError(
             f"Path worker did not report a finished state: {status.get('state', 'missing')}"
         )
-    if int(status.get("point_count", 0) or 0) <= 0:
-        raise RuntimeError("The path worker produced no path-point rows")
 
     expected_frames = {int(item.get("frame", 0)): item for item in config.get("frames", [])}
     actual_frames = {int(item.get("frame", 0)): item for item in status.get("frames", [])}
@@ -6547,7 +6754,17 @@ def _verify_path_output(csv_path, config_path, status_path, started_ns):
 
     first = _read_csv_first_row(csv_path)
     if not first:
-        raise RuntimeError("The generated path CSV contains no data rows")
+        with open(csv_path, encoding="utf-8", newline="") as handle:
+            header = next(csv.reader(handle), [])
+        if not {"x", "y", "z", "frame", "path_gain_db"}.issubset(header):
+            raise RuntimeError("Empty path CSV is missing the required columns")
+        if int(status.get("point_count", -1)) != 0:
+            raise RuntimeError("Empty path CSV disagrees with the worker point count")
+        for frame in actual_frames.values():
+            links = frame.get("channel_analytics", {}).get("links", [])
+            if not links or any(int(link.get("path_count", -1)) != 0 for link in links):
+                raise RuntimeError("Empty path CSV disagrees with the saved link counts")
+        return config, status
     first_frame = int(float(first.get("frame", 0)))
     expected = expected_frames.get(first_frame)
     if expected is not None:
@@ -6772,6 +6989,8 @@ def _poll_radio_map_process():
     success = False
 
     try:
+        if return_code != 0:
+            raise RuntimeError(f"Worker exited with code {return_code}; files retained for diagnosis")
         if status_payload.get("state") != "finished":
             error_text = status_payload.get("error", "")
             raise RuntimeError(
@@ -6840,6 +7059,7 @@ def _poll_radio_map_process():
             run_dir, settings, path_result=False, radio_result=True,
             export_file=export_file, export_metadata=export_metadata,
             export_format=export_format,
+            geometry_nodes_metadata=output_spec.get("geometry_nodes_metadata_json", ""),
         )
         settings.last_status += f"; {cleanup_note}"
         success = True
@@ -6852,6 +7072,8 @@ def _poll_radio_map_process():
         )
 
     if _BATCH_STATE.get("active") and _BATCH_STATE.get("scene_name") == scene_name:
+        if not success:
+            _BATCH_STATE["had_errors"] = True
         _BATCH_STATE["radio_map_status"] = settings.last_status
         if _BATCH_STATE.get("pending_radio_map_3d"):
             _BATCH_STATE["pending_radio_map_3d"] = False
@@ -6880,7 +7102,7 @@ def _poll_radio_map_process():
                 str(_BATCH_STATE.get("radio_map_status") or "").strip(),
             ]
             statuses = [item for item in statuses if item]
-            settings.last_status = ("Batch complete — " if success else "Batch finished with errors — ") + " | ".join(statuses)
+            settings.last_status = ("Batch complete — " if success and not _BATCH_STATE.get("had_errors") else "Batch finished with errors — ") + " | ".join(statuses)
             _reset_batch_state()
 
     for window in bpy.context.window_manager.windows:
@@ -7254,7 +7476,8 @@ def _import_paths_from_json(scene, results_path, clear_existing=True):
 
     if clear_existing:
         for obj in list(collection.objects):
-            bpy.data.objects.remove(obj, do_unlink=True)
+            if obj.type == "CURVE" and "sionna_path_index" in obj:
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     imported = 0
     for index, item in enumerate(paths):
@@ -7348,6 +7571,8 @@ def _poll_sionna_process():
     success = False
 
     try:
+        if return_code != 0:
+            raise RuntimeError(f"Worker exited with code {return_code}; files retained for diagnosis")
         if status_payload.get("state") != "finished":
             error_text = status_payload.get("error", "")
             raise RuntimeError(
@@ -7375,6 +7600,14 @@ def _poll_sionna_process():
         if auto_triggered:
             embedded_obj["sionna_auto_device_move_result"] = True
         channel_frame_count = _attach_channel_analytics_from_manifest(embedded_obj, run_dir)
+        try:
+            _parameter_study.attach(
+                sys.modules[__name__], scene, embedded_obj, config,
+                _load_json_file(run_dir / "frames_manifest.json"),
+            )
+        except Exception as exc:
+            settings.parameter_study_status = f"Analysis could not be prepared: {exc}"
+            traceback.print_exc()
         _maybe_auto_refresh_analytics(scene, "PATHS")
         frame_count = int(verified_status.get("frame_count", _RUN_STATE.get("frame_count", 1)) or 1)
         completed_frames = int(verified_status.get("completed_frames", frame_count) or frame_count)
@@ -7403,6 +7636,7 @@ def _poll_sionna_process():
             run_dir, settings, path_result=True, radio_result=False,
             export_file=export_file, export_metadata=export_metadata,
             export_format=export_format,
+            geometry_nodes_metadata=output_spec.get("geometry_nodes_metadata_json", ""),
         )
         settings.last_status += f"; {cleanup_note}"
         success = True
@@ -7418,6 +7652,8 @@ def _poll_sionna_process():
     # worker exits even when path verification failed, so one failed output
     # does not leave the other pointing at an older CSV indefinitely.
     if _BATCH_STATE.get("active") and _BATCH_STATE.get("scene_name") == scene_name:
+        if not success:
+            _BATCH_STATE["had_errors"] = True
         _BATCH_STATE["path_status"] = settings.last_status
         if _BATCH_STATE.get("pending_radio_map"):
             _BATCH_STATE["pending_radio_map"] = False
@@ -7551,7 +7787,6 @@ def _number_stats(values):
         "mean": statistics.fmean(values),
         "median": statistics.median(values),
     }
-
 
 
 def _percentile(values, percentile):
@@ -7735,7 +7970,7 @@ def _channel_frame_series(links):
             "frame": frame,
             "link_count": len(frame_links),
             "path_count": sum(int(item.get("path_count", 0)) for item in frame_links),
-            "total_power_db": _linear_to_db(total_linear),
+            "total_power_db": _linear_to_db(total_linear) if total_linear > 0 else None,
             "rms_delay_spread_ns": statistics.fmean(rms_values) if rms_values else None,
             "first_arrival_ns": min(first_values) if first_values else None,
             "dominant_to_rest_db": statistics.fmean(dominant_values) if dominant_values else None,
@@ -8575,7 +8810,6 @@ def _svg_line_chart(x_values, y_values, title, x_label, y_label, width=560, heig
     )
 
 
-
 def _svg_cdf(values, title, x_label, width=560, height=260):
     values = sorted(_finite_numbers(values))
     if not values:
@@ -8933,7 +9167,7 @@ def _analytics_dashboard_html(summary, records):
             f'<td>{int(item.get("frame", 0))}</td>'
             f'<td>{int(item.get("pos_idx", 0))}</td>'
             f'<td>{int(item.get("path_count", 0))}</td>'
-            f'<td>{float(item.get("total_power_db", -600.0)):.3f}</td>'
+            f'<td>{_optional_number(item.get("total_power_db"), ".3f")}</td>'
             f'<td>{_optional_number(item.get("rms_delay_spread_ns"), ".4g")}</td>'
             f'<td>{_optional_number(item.get("rms_doppler_spread_hz"), ".4g")}</td>'
             f'<td>{_optional_number(item.get("max_abs_doppler_hz"), ".4g")}</td>'
@@ -9177,13 +9411,15 @@ class SIONNA_PG_MaterialConfig(PropertyGroup):
     )
     model: EnumProperty(
         name="Material Model",
-        description="Use an ITU-R P.2040 frequency-dependent model or constant custom properties",
+        description="Use frequency-dependent building or plant materials, or constant custom properties",
         items=(
             ("ITU", "ITU Preset", "Use a Sionna ITURadioMaterial whose permittivity and conductivity follow scene frequency"),
             ("CUSTOM", "Custom", "Use a Sionna RadioMaterial with editable constant permittivity and conductivity"),
+            ("VEGETATION", "Plant Reference", "Frequency-dependent leaf or moist wood properties from ITU-R P.833-10, mapped to a Sionna slab"),
         ),
         default="ITU",
     )
+    plant_model: EnumProperty(name="Plant Dielectric", items=_plant_materials.MODEL_ITEMS, default="LEAF_P833")
     itu_type: EnumProperty(
         name="ITU Type",
         items=_ITU_MATERIAL_ITEMS,
@@ -9196,6 +9432,7 @@ class SIONNA_PG_MaterialConfig(PropertyGroup):
         min=0.0,
         soft_max=2.0,
         unit="LENGTH",
+        precision=6,
     )
     relative_permittivity: FloatProperty(
         name="Relative Permittivity",
@@ -9344,7 +9581,39 @@ def _auto_compute_paths_toggle_update(settings, context):
         traceback.print_exc()
 
 
+def _simulation_mode_get(settings):
+    flags = (settings.simulate_paths, settings.simulate_radio_map, settings.simulate_radio_map_3d)
+    if sum(flags) == 1:
+        return flags.index(True)
+    return 4
+
+
+def _simulation_mode_set(settings, value):
+    if value < 3:
+        settings.simulate_paths = value == 0
+        settings.simulate_radio_map = value == 1
+        settings.simulate_radio_map_3d = value == 2
+    elif value == 4 and sum((settings.simulate_paths, settings.simulate_radio_map, settings.simulate_radio_map_3d)) < 2:
+        settings.simulate_paths = True
+        settings.simulate_radio_map = True
+
+
+def _runtime_probe_signature(settings):
+    return [settings.runtime_mode, settings.sionna_python, settings.sionna_site_packages, settings.drjit_libllvm_path]
+
+
 class SIONNA_PG_Settings(PropertyGroup):
+    simulation_mode: EnumProperty(
+        name="Simulation Type", get=_simulation_mode_get, set=_simulation_mode_set,
+        items=[("PATHS", "Paths", "TX to RX propagation paths", 0),
+               ("RADIO_MAP", "2D Radio Map", "Area-averaged coverage", 1),
+               ("RADIO_MAP_3D", "3D Radio Map", "Stacked horizontal coverage maps", 2),
+               ("BATCH", "Combined Outputs", "Queue multiple outputs; preserves legacy projects", 4)])
+    runtime_probe_json: StringProperty(options={"SKIP_SAVE"}, default="")
+    deterministic_paths: BoolProperty(
+        name="Deterministic Paths", default=True,
+        description="Use Sionna RT 2.1 deterministic execution for repeatable path results; same ray budget")
+
     runtime_mode: EnumProperty(
         name="Runtime",
         description="Choose how Sionna simulation workers obtain Python and packages",
@@ -9396,6 +9665,7 @@ class SIONNA_PG_Settings(PropertyGroup):
         default="//sionna_runs",
     )
 
+    plant_library_choice: EnumProperty(name="Plant Preset", items=_plant_materials.PRESET_ITEMS, default="LEAF", options=set())
     material_selection: PointerProperty(
         name="Material",
         description="Blender material to configure and assign as a Sionna radio material",
@@ -9581,6 +9851,7 @@ class SIONNA_PG_Settings(PropertyGroup):
         description="Sionna RT uses one shared TX array and one shared RX array, so apply pattern and array settings to every device of this role",
         default=True,
     )
+
 
     motion_template_enabled: BoolProperty(
         name="TX / RX Motion Path",
@@ -9967,6 +10238,30 @@ class SIONNA_PG_Settings(PropertyGroup):
         name="Procedural Export Report Path", default="",
     )
 
+    isac_enabled: BoolProperty(name="CIR / ISAC dataset", default=False, description="Export all-antenna channels and evaluated human poses; retrace geometry at every selected frame")
+    isac_tissue_preset: EnumProperty(name="Tissue proxy",items=[('DRY_SKIN','Dry skin','Homogeneous surface proxy'),('MUSCLE','Muscle','Homogeneous comparison'),('FAT','Fat (not infiltrated)','Sensitivity comparison')],default='DRY_SKIN')
+    isac_proxy_thickness: FloatProperty(name="Equivalent slab (m)",default=.1,min=.001,max=1,description="Equivalent homogeneous slab; not anatomical skin thickness")
+    isac_capture_pose: BoolProperty(name="Human ground truth", default=True, description="Disable for empty-room baselines or CIR-only scenes")
+    isac_show_metadata: BoolProperty(name="Dataset identifiers", default=False)
+    isac_show_hud: BoolProperty(name="Camera statistics", default=False)
+    isac_last_run_dir: StringProperty(name="Last ISAC run", subtype='DIR_PATH', default='')
+    isac_plots: BoolProperty(name="CIR plots", default=True)
+    isac_csv: BoolProperty(name="CIR component CSV", default=True)
+    isac_csi: BoolProperty(name="Uniform-grid CSI", default=True)
+    isac_csi_bins: IntProperty(name="Frequency bins", default=64, min=2, max=4096)
+    isac_subject: PointerProperty(name="Human mesh / rig", type=bpy.types.Object, poll=lambda self,obj: obj.type in {'MESH','ARMATURE'}, description="Empty selects the sole armature automatically")
+    isac_activity: StringProperty(name="Activity label", default="unlabelled", description="Timeline markers named isac:label override this value from their frame onward")
+    isac_subject_id: StringProperty(name="Subject ID", default="synthetic_subject_001")
+    isac_episode_id: StringProperty(name="Episode ID", default="episode_001")
+    isac_environment_id: StringProperty(name="Environment ID", default="room_001")
+    isac_license: StringProperty(name="Dataset license", default="UNSPECIFIED", description="Specify only a license you have rights to grant; exported asset rights also apply")
+    isac_hud: BoolProperty(name="Camera statistics overlay", default=False, update=lambda self,context: _isac_hud.update(context.scene))
+    isac_hud_tx: IntProperty(name="TX index",default=0,min=0,update=lambda self,context: _isac_hud.update(context.scene))
+    isac_hud_rx: IntProperty(name="RX index",default=0,min=0,update=lambda self,context: _isac_hud.update(context.scene))
+    isac_hud_corner: EnumProperty(name="Corner", items=[(v,v.replace('_',' ').title(),'') for v in ['TOP_RIGHT','TOP_LEFT','BOTTOM_RIGHT','BOTTOM_LEFT']], default='TOP_RIGHT', update=lambda self,context: _isac_hud.update(context.scene))
+    isac_hud_scale: FloatProperty(name="Overlay size",default=1,min=.5,max=1.5,update=lambda self,context: _isac_hud.update(context.scene))
+
+
     # Central run controls
     simulate_paths: BoolProperty(
         name="Propagation Paths",
@@ -9986,7 +10281,7 @@ class SIONNA_PG_Settings(PropertyGroup):
     refresh_scene_before_run: BoolProperty(
         name="Refresh Scene Before Run",
         description="Re-export a static scene before running; procedural geometry is always evaluated and exported per sampled frame",
-        default=False,
+        default=True,
     )
 
     # Panel disclosure states
@@ -10003,6 +10298,36 @@ class SIONNA_PG_Settings(PropertyGroup):
     ui_show_scene_cache: BoolProperty(name="Simulation", default=True)
     ui_show_status: BoolProperty(name="Status", default=True)
     ui_show_analytics: BoolProperty(name="Analytics", default=True)
+
+    vegetation_metrics_enabled: BoolProperty(
+        name="Measure Vegetation", default=True, options=set(),
+        description="Measure evaluated vegetation faces per object and frame; include Geometry Nodes instances and TX/RX link corridors",
+    )
+    vegetation_corridor_width: FloatProperty(
+        name="Link Corridor Width (m)", default=1., min=.001, soft_max=20., options=set(),
+        description="Square corridor around the straight TX-RX segment; density divides leaf area by the full corridor volume, including empty space",
+    )
+    vegetation_leaf_area_convention: EnumProperty(
+        name="Leaf Area Convention", options=set(), default='AUTO', items=[
+            ('AUTO','Automatic by topology','Open leaf islands: full mesh area; closed islands: half surface area'),
+            ('SINGLE_SURFACE','Single surface','Sum leaf face areas; use one sheet per leaf'),
+            ('HALF_SURFACE','Half surface','Half leaf face area; for closed thin leaves with two sides')],
+    )
+
+    parameter_analysis_enabled: BoolProperty(
+        name="Prepare Parameter Analysis", default=True, options=set(),
+        description="Save evaluated inputs and channel summaries on new paths results and create local parameter plots, independently of file export",
+    )
+    parameter_study_source: EnumProperty(
+        name="Source", items=[("RESULT", "Blender Result", "Use a saved paths result"),
+                              ("IMPORTED", "Imported Export", "Use an imported simulation metadata JSON or ZIP")],
+        default="RESULT", options=set(),
+    )
+    parameter_study_object: PointerProperty(name="Paths Result", type=bpy.types.Object, poll=_parameter_study.object_poll)
+    parameter_study_imported: PointerProperty(name="Imported Run", type=bpy.types.Text, poll=_parameter_study.text_poll)
+    parameter_study_reference: PointerProperty(name="Reference Run", type=bpy.types.Text, poll=_parameter_study.text_poll)
+    parameter_study_report: StringProperty(name="Parameter Report", subtype="FILE_PATH", default="")
+    parameter_study_status: StringProperty(name="Parameter Analysis Status", default="Run paths or import an existing export")
 
     analytics_source: EnumProperty(
         name="Data Source",
@@ -10078,6 +10403,20 @@ class SIONNA_PG_Settings(PropertyGroup):
     analytics_last_object: StringProperty(name="Analytics Object", default="")
     analytics_dashboard_path: StringProperty(name="Analytics Dashboard", default="")
 
+    export_geometry_nodes_metadata: BoolProperty(
+        name="Export Geometry Nodes Parameters",
+        description=(
+            "Save one JSON per simulated frame with evaluated Geometry Nodes inputs "
+            "for objects in scene and its subcollections, plus run and simulation metadata. "
+            "Independent of CSV/HDF5 result export"
+        ),
+        default=False,
+        options=set(),
+    )
+    last_geometry_nodes_metadata_path: StringProperty(
+        name="Last Geometry Nodes Metadata", default="", subtype="FILE_PATH",
+    )
+
     export_format: EnumProperty(
         name="Export Results",
         description="Choose the durable on-disk export created after Blender embeds the simulation result",
@@ -10124,11 +10463,86 @@ class SIONNA_PG_Settings(PropertyGroup):
     last_radio_map_3d_object: StringProperty(name="Last 3D Radio Map Object", default="")
 
 
+class SIONNA_OT_SelectPlantMaterial(Operator):
+    bl_idname = "sionna_bridge.select_plant_material"
+    bl_label = "Load Plant Preset"
+    bl_description = "Create plant library materials and select this preset; existing edits and geometry assignments are preserved"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        _plant_blender.ensure_library(sys.modules[__name__])
+        settings = context.scene.sionna_bridge
+        name = _plant_materials.PRESETS[settings.plant_library_choice]["name"]
+        settings.material_selection = bpy.data.materials[name]
+        self.report({"INFO"}, f"Selected {name}; assign it to the corresponding leaf or wood geometry")
+        return {"FINISHED"}
+
+
+class SIONNA_OT_PlantSolverSettings(Operator):
+    bl_idname = "sionna_bridge.plant_solver_settings"
+    bl_label = "Enable Plant Reflection / Transmission"
+    bl_description = "Enable reflection and transmission; enable diffuse interactions for any user-selected nonzero scattering coefficient"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.sionna_bridge
+        settings.enable_reflection = True
+        settings.enable_refraction = True
+        settings.enable_diffuse = True
+        settings.refresh_scene_before_run = True
+        self.report({"INFO"}, "Reflection, transmission and diffuse interactions enabled; material S controls diffuse strength")
+        return {"FINISHED"}
+
+
+class SIONNA_OT_VegetationMeasurements(Operator):
+    bl_idname = "sionna_bridge.vegetation_measurements"
+    bl_label = "Inspect Vegetation Measurements"
+    bl_description = "Measure the current evaluated frame and show object and TX/RX metrics in a Blender text report"
+
+    show_definitions: BoolProperty(default=False, options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        if self.show_definitions:
+            text = bpy.data.texts.get("Sionna Vegetation Guide") or bpy.data.texts.new("Sionna Vegetation Guide")
+            text.clear()
+            text.write((_addon_dir() / "VEGETATION_METRICS.md").read_text(encoding="utf-8"))
+            if context.area is not None:
+                context.area.type = "TEXT_EDITOR"
+                context.area.spaces.active.text = text
+            return {"FINISHED"}
+        try:
+            data = _vegetation.preview(sys.modules[__name__], context)
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Measured {len(data['objects'])} vegetation objects at frame {data['frame']}")
+        return {"FINISHED"}
+
+
+class SIONNA_OT_PlantMaterialReference(Operator):
+    bl_idname = "sionna_bridge.plant_material_reference"
+    bl_label = "Plant Material References & Setup"
+    bl_description = "Open the bundled material assumptions, literature references and Geometry Nodes setup guide"
+
+    def execute(self, context):
+        path = _addon_dir() / "PLANT_MATERIALS.md"
+        text = next((t for t in bpy.data.texts if t.get("sionna_plant_guide")), None)
+        if text is None:
+            text = bpy.data.texts.new("Sionna Plant Material Guide")
+        text.clear()
+        text.write(path.read_text(encoding="utf-8"))
+        text["sionna_plant_guide"] = True
+        if context.area is not None:
+            context.area.type = "TEXT_EDITOR"
+            context.area.spaces.active.text = text
+        self.report({"INFO"}, "Plant guide loaded in Blender's Text Editor")
+        return {"FINISHED"}
+
 
 class SIONNA_OT_CreateDefaultMaterials(Operator):
     bl_idname = "sionna_bridge.create_default_materials"
     bl_label = "Create Default Sionna Materials"
-    bl_description = "Create built-in Sionna ITU materials and Blender-only TX/RX representation materials"
+    bl_description = "Create building and plant radio materials plus Blender-only TX/RX display materials"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -10632,6 +11046,7 @@ class SIONNA_OT_TestEnvironment(Operator):
 
     def execute(self, context):
         settings = context.scene.sionna_bridge
+        settings.runtime_probe_json = ""
         executable, error = _resolve_python_executable(settings)
         if executable is None:
             settings.last_status = error
@@ -10643,6 +11058,8 @@ class SIONNA_OT_TestEnvironment(Operator):
         # immediate clean exit after flushing the diagnostic JSON.
         probe = (
             "import json,sys,os,importlib.metadata as m;"
+            f"sys.path.insert(0,{str(Path(__file__).resolve().parent)!r});"
+            "from worker_runtime import exit_worker;"
             "import sionna.rt;"
             "import mitsuba as mi;"
             "import numpy as np;"
@@ -10658,7 +11075,7 @@ class SIONNA_OT_TestEnvironment(Operator):
             "'drjit_libllvm_path':os.environ.get('DRJIT_LIBLLVM_PATH','')"
             "};"
             "print(json.dumps(payload),flush=True);"
-            "os._exit(0)"
+            "exit_worker(0)"
         )
         probe_env, libllvm_path = _sionna_worker_environment(settings, executable)
         try:
@@ -10688,7 +11105,9 @@ class SIONNA_OT_TestEnvironment(Operator):
             except Exception:
                 continue
 
-        if info is not None:
+        if info is not None and result.returncode == 0:
+            info["bridge_signature"] = _runtime_probe_signature(settings)
+            settings.runtime_probe_json = json.dumps(info)
             llvm_note = " | LLVM OK" if info.get("drjit_libllvm_path") else ""
             mode_label = "Blender 5.2 Python" if _runtime_mode(settings) == "BLENDER" else "External Python"
             settings.last_status = (
@@ -10752,12 +11171,7 @@ class SIONNA_OT_Run(Operator):
 
     @classmethod
     def poll(cls, context):
-        path_process = _RUN_STATE.get("process")
-        map_process = _RADIO_MAP_STATE.get("process")
-        return (
-            (path_process is None or path_process.poll() is not None)
-            and (map_process is None or map_process.poll() is not None)
-        )
+        return _processes_idle()
 
     def execute(self, context):
         settings = context.scene.sionna_bridge
@@ -10796,12 +11210,7 @@ class SIONNA_OT_RunCached(Operator):
 
     @classmethod
     def poll(cls, context):
-        path_process = _RUN_STATE.get("process")
-        map_process = _RADIO_MAP_STATE.get("process")
-        return (
-            (path_process is None or path_process.poll() is not None)
-            and (map_process is None or map_process.poll() is not None)
-        )
+        return _processes_idle()
 
     def execute(self, context):
         settings = context.scene.sionna_bridge
@@ -10834,12 +11243,7 @@ class SIONNA_OT_GenerateRadioMap(Operator):
 
     @classmethod
     def poll(cls, context):
-        path_process = _RUN_STATE.get("process")
-        map_process = _RADIO_MAP_STATE.get("process")
-        return (
-            (path_process is None or path_process.poll() is not None)
-            and (map_process is None or map_process.poll() is not None)
-        )
+        return _processes_idle()
 
     def execute(self, context):
         settings = context.scene.sionna_bridge
@@ -10862,12 +11266,7 @@ class SIONNA_OT_GenerateRadioMapCached(Operator):
 
     @classmethod
     def poll(cls, context):
-        path_process = _RUN_STATE.get("process")
-        map_process = _RADIO_MAP_STATE.get("process")
-        return (
-            (path_process is None or path_process.poll() is not None)
-            and (map_process is None or map_process.poll() is not None)
-        )
+        return _processes_idle()
 
     def execute(self, context):
         settings = context.scene.sionna_bridge
@@ -10977,7 +11376,6 @@ class SIONNA_OT_ImportPaths(Operator):
             return {"CANCELLED"}
 
 
-
 class SIONNA_OT_UpdateGeometryNodesCSV(Operator):
     bl_idname = "sionna_bridge.update_geometry_nodes_csv"
     bl_label = "Update Geometry Nodes CSV"
@@ -11058,6 +11456,24 @@ class SIONNA_OT_OpenCSVFolder(Operator):
         return {"FINISHED"}
 
 
+class SIONNA_OT_OpenGeometryNodesMetadata(Operator):
+    bl_idname = "sionna_bridge.open_geometry_nodes_metadata"
+    bl_label = "Open Geometry Nodes Metadata"
+    bl_description = "Open the folder containing the last per-frame Geometry Nodes JSON export"
+
+    def execute(self, context):
+        value = context.scene.sionna_bridge.last_geometry_nodes_metadata_path
+        if not value or not Path(value).is_file():
+            self.report({"ERROR"}, "No Geometry Nodes metadata export is available")
+            return {"CANCELLED"}
+        try:
+            bpy.ops.wm.path_open(filepath=str(Path(value).parent))
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class SIONNA_OT_OpenWorkspace(Operator):
     bl_idname = "sionna_bridge.open_workspace"
     bl_label = "Open Workspace"
@@ -11109,7 +11525,6 @@ class SIONNA_OT_OpenLastRun(Operator):
         return {"FINISHED"}
 
 
-
 class SIONNA_OT_CopyFullStatus(Operator):
     bl_idname = "sionna_bridge.copy_full_status"
     bl_label = "Copy Full Status"
@@ -11148,6 +11563,55 @@ class SIONNA_OT_OpenStatusLog(Operator):
             else:
                 subprocess.Popen(["xdg-open", str(folder)])
         return {"FINISHED"}
+
+
+class SIONNA_OT_HumanMaterial(Operator):
+    bl_idname = "sionna_bridge.human_material"
+    bl_label = "Assign human radio proxy"
+    bl_options = {"REGISTER", "UNDO"}
+    def execute(self, context):
+        try:
+            n,er,sigma=_human_materials.assign(context)
+        except Exception as exc:
+            self.report({'ERROR'},str(exc));return {'CANCELLED'}
+        self.report({'INFO'},f'{n} meshes: epsilon {er:.3f}, conductivity {sigma:.3f} S/m at current frequency')
+        return {'FINISHED'}
+
+
+class SIONNA_OT_ISACOverlay(Operator):
+    bl_idname = "sionna_bridge.isac_overlay"
+    bl_label = "Create / update camera statistics"
+    bl_options = {"REGISTER", "UNDO"}
+    def execute(self, context):
+        if context.scene.camera is None:
+            self.report({"ERROR"}, "Choose a scene camera first")
+            return {"CANCELLED"}
+        _isac_hud.ensure(context.scene)
+        context.scene.sionna_bridge.isac_hud=True
+        _isac_hud.update(context.scene)
+        return {"FINISHED"}
+
+
+class SIONNA_OT_CancelRun(Operator):
+    bl_idname = "sionna_bridge.cancel_run"
+    bl_label = "Stop Simulation"
+    bl_description = "Stop the active worker and queued outputs; retain partial files for inspection"
+
+    @classmethod
+    def poll(cls, context):
+        return not _processes_idle()
+
+    def execute(self, context):
+        try:
+            count = _cancel_active_runs()
+            context.scene.sionna_bridge.dynamic_mode = False
+            _set_status(context.scene.sionna_bridge,
+                        f"Stopped {count} worker(s); partial files retained; live updates paused")
+            self.report({"INFO"}, context.scene.sionna_bridge.last_status)
+            return {"FINISHED"}
+        except Exception as exc:
+            self.report({"ERROR"}, f"Could not stop worker: {exc}")
+            return {"CANCELLED"}
 
 
 class SIONNA_OT_RunSelected(Operator):
@@ -11252,7 +11716,6 @@ class SIONNA_OT_RunSelected(Operator):
             return {"CANCELLED"}
 
 
-
 def _draw_wrapped_text(layout, text, *, width=92, icon="NONE"):
     text = str(text or "").strip()
     if not text:
@@ -11282,6 +11745,39 @@ def _draw_collapsible_header(box, settings, property_name, label, icon=None):
         icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False,
     )
     return expanded
+
+
+class SIONNA_OT_OpenParameterPlots(Operator):
+    bl_idname = "sionna_bridge.open_parameter_plots"
+    bl_label = "Open Parameter Plots"
+    bl_description = "Plot recorded inputs against channel metrics with descriptive statistics in a local report"
+
+    def execute(self, context):
+        try:
+            path = _parameter_study.write_selected(sys.modules[__name__], context.scene)
+            bpy.ops.wm.url_open(url=path.resolve().as_uri())
+            return {"FINISHED"}
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+
+class SIONNA_OT_ImportParameterRun(Operator, ImportHelper):
+    bl_idname = "sionna_bridge.import_parameter_run"
+    bl_label = "Import Simulation Export"
+    bl_description = "Import a paths metadata JSON or simulation export ZIP; no simulation rerun is needed"
+    filename_ext = ".json"
+    filter_glob: StringProperty(default="*.json;*.zip", options={"HIDDEN"})
+    as_reference: BoolProperty(name="Use as Reference", default=False, options={"HIDDEN"})
+
+    def execute(self, context):
+        try:
+            study = _parameter_study.import_run(context.scene, self.filepath, self.as_reference)
+            self.report({"INFO"}, f"Imported {study['result_frames']} frames")
+            return {"FINISHED"}
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
 
 
 class SIONNA_OT_RefreshAnalytics(Operator):
@@ -11326,821 +11822,6 @@ class SIONNA_OT_OpenAnalyticsDashboard(Operator):
             return {"CANCELLED"}
 
 
-class SIONNA_PT_MainPanel(Panel):
-    bl_label = "SionnaRT-Bridge"
-    bl_idname = "SIONNA_PT_main"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Sionna RT"
-
-    def draw(self, context):
-        layout = self.layout
-        settings = context.scene.sionna_bridge
-
-        # Sionna runtime and workspace
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_environment", "Sionna Runtime", "CONSOLE"
-        ):
-            box.prop(settings, "runtime_mode", text="Runtime")
-            if _runtime_mode(settings) == "BLENDER":
-                box.label(text="Blender 5.2 Python; no external interpreter required", icon="CHECKMARK")
-                box.prop(settings, "sionna_site_packages")
-                detected_packages = _resolve_sionna_site_packages(settings)
-                if detected_packages is not None:
-                    box.label(text=f"Sionna packages: {detected_packages}", icon="CHECKMARK")
-                else:
-                    box.label(text="Sionna packages not detected", icon="ERROR")
-            else:
-                box.prop(settings, "sionna_python")
-
-            box.label(text="Scene Export: Integrated Blender 5.2 Mitsuba XML/PLY", icon="CHECKMARK")
-            box.prop(settings, "drjit_libllvm_path")
-            resolved_python, python_error = _resolve_python_executable(settings)
-            if resolved_python is not None:
-                box.label(text=f"Worker Python: {resolved_python}", icon="CHECKMARK")
-            else:
-                box.label(text=python_error, icon="ERROR")
-            detected_llvm = _resolve_drjit_libllvm(settings, resolved_python) if resolved_python else _resolve_drjit_libllvm(settings)
-            if detected_llvm is not None:
-                box.label(text=f"Dr.Jit LLVM: {detected_llvm}", icon="CHECKMARK")
-            elif os.name == "nt":
-                box.label(text="LLVM-C.dll not detected (only needed if CUDA is unavailable)", icon="INFO")
-            box.prop(settings, "workspace_dir")
-            row = box.row(align=True)
-            row.operator("sionna_bridge.test_environment", text="Test Runtime")
-            row.operator("sionna_bridge.open_workspace", text="Open Workspace")
-
-        # Workflow
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_workflow", "Workflow", "OUTLINER_COLLECTION"
-        ):
-            row = box.row(align=True)
-            row.operator("sionna_bridge.create_environment", text="Create / Repair Env")
-            row.operator("sionna_bridge.move_selected_to_scene", text="Move to Static Scene")
-            box.operator(
-                "sionna_bridge.move_selected_to_procedural",
-                text="Move to Procedural Geometry",
-                icon="GEOMETRY_NODES",
-            )
-
-        # Shared solver settings
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_simulation", "Simulation Settings", "SETTINGS"
-        ):
-            box.prop(settings, "frequency_ghz")
-            noise = box.box()
-            noise.label(text="Power and Noise", icon="LIGHT")
-            row = noise.row(align=True)
-            row.prop(settings, "bandwidth_mhz", text="Bandwidth (MHz)")
-            row.prop(settings, "temperature_k", text="Temperature (K)")
-            arrays = box.box()
-            arrays.label(text="Antenna Arrays — shared by role", icon="OUTLINER_OB_LIGHT")
-            tx_box = arrays.box()
-            tx_box.label(text="Transmitters (TX)")
-            tx_box.prop(settings, "tx_antenna_pattern", text="Pattern")
-            row = tx_box.row(align=True)
-            row.prop(settings, "tx_array_rows", text="Rows")
-            row.prop(settings, "tx_array_cols", text="Columns")
-            row = tx_box.row(align=True)
-            row.prop(settings, "tx_vertical_spacing", text="Vertical λ")
-            row.prop(settings, "tx_horizontal_spacing", text="Horizontal λ")
-            row = tx_box.row(align=True)
-            row.prop(settings, "tx_polarization", text="Polarization")
-            row.prop(settings, "tx_polarization_model", text="Model")
-            op = tx_box.operator("sionna_bridge.sync_role_names", text="Sync TX Names")
-            op.role = "TX"
-
-            rx_box = arrays.box()
-            rx_box.label(text="Receivers (RX)")
-            rx_box.prop(settings, "rx_antenna_pattern", text="Pattern")
-            row = rx_box.row(align=True)
-            row.prop(settings, "rx_array_rows", text="Rows")
-            row.prop(settings, "rx_array_cols", text="Columns")
-            row = rx_box.row(align=True)
-            row.prop(settings, "rx_vertical_spacing", text="Vertical λ")
-            row.prop(settings, "rx_horizontal_spacing", text="Horizontal λ")
-            row = rx_box.row(align=True)
-            row.prop(settings, "rx_polarization", text="Polarization")
-            row.prop(settings, "rx_polarization_model", text="Model")
-            op = rx_box.operator("sionna_bridge.sync_role_names", text="Sync RX Names")
-            op.role = "RX"
-
-            row = box.row(align=True)
-            row.prop(settings, "max_depth")
-            row.prop(settings, "seed")
-            box.prop(settings, "samples_per_src")
-            box.prop(settings, "max_num_paths_per_src")
-            box.prop(settings, "sim_numeric_id")
-            box.prop(settings, "timeline_mode")
-            if settings.timeline_mode != "CURRENT":
-                box.prop(settings, "timeline_step")
-            box.prop(settings, "enable_mobility_doppler")
-            grid = box.grid_flow(row_major=True, columns=2, even_columns=True)
-            grid.prop(settings, "enable_los")
-            grid.prop(settings, "enable_reflection")
-            grid.prop(settings, "enable_refraction")
-            grid.prop(settings, "enable_diffuse")
-            grid.prop(settings, "enable_diffraction")
-            grid.prop(settings, "enable_edge_diffraction")
-            grid.prop(settings, "diffraction_lit_region")
-
-        # Radio materials
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_materials", "Radio Materials", "MATERIAL"
-        ):
-            row = box.row(align=True)
-            row.operator(
-                "sionna_bridge.create_default_materials",
-                text="Create Default Materials",
-                icon="ADD",
-            )
-            row.operator(
-                "sionna_bridge.pick_active_material",
-                text="Use Active",
-                icon="EYEDROPPER",
-            )
-            box.prop(settings, "material_selection", text="Material")
-            material = settings.material_selection
-            if material is not None:
-                config = material.sionna_radio
-                row = box.row(align=True)
-                row.operator(
-                    "sionna_bridge.enable_material",
-                    text="Enable / Prefix itu_",
-                    icon="CHECKMARK",
-                )
-                row.operator(
-                    "sionna_bridge.assign_material",
-                    text="Assign to Selected",
-                    icon="MATERIAL",
-                )
-                if not material.name.lower().startswith("itu_"):
-                    box.label(text="Material name must start with itu_ for export.", icon="ERROR")
-                if config.enabled or material.name.lower().startswith("itu_"):
-                    box.prop(config, "model")
-                    if config.model == "ITU":
-                        box.prop(config, "itu_type")
-                    else:
-                        row = box.row(align=True)
-                        row.prop(config, "relative_permittivity")
-                        row.prop(config, "conductivity")
-                    box.prop(config, "thickness")
-                    row = box.row(align=True)
-                    row.prop(config, "scattering_coefficient")
-                    row.prop(config, "xpd_coefficient")
-                    box.prop(config, "scattering_pattern")
-                    if config.scattering_pattern == "directive":
-                        box.prop(config, "directive_alpha_r")
-                    elif config.scattering_pattern == "backscattering":
-                        row = box.row(align=True)
-                        row.prop(config, "backscatter_alpha_r")
-                        row.prop(config, "backscatter_alpha_i")
-                        box.prop(config, "backscatter_lambda")
-
-        # Procedural geometry
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_procedural", "Procedural Geometry", "GEOMETRY_NODES"
-        ):
-            box.prop(settings, "procedural_geometry_enabled")
-            if settings.procedural_geometry_enabled:
-                box.prop(settings, "procedural_capture_analytics")
-                box.prop(settings, "procedural_skip_failed_frames")
-            box.operator(
-                "sionna_bridge.move_selected_to_procedural",
-                text="Move Selected to Procedural Geometry",
-            )
-
-        # Devices
-        box = layout.box()
-        tx_count = len(_device_objects(context.scene, "TX"))
-        rx_count = len(_device_objects(context.scene, "RX"))
-        if _draw_collapsible_header(
-            box, settings, "ui_show_devices",
-            f"Devices — {tx_count} TX / {rx_count} RX", "EMPTY_AXIS"
-        ):
-            row = box.row(align=True)
-            op = row.operator("sionna_bridge.add_device", text="Add TX", icon="ADD")
-            op.role = "TX"
-            op = row.operator("sionna_bridge.add_device", text="Add RX", icon="ADD")
-            op.role = "RX"
-            row = box.row(align=True)
-            op = row.operator("sionna_bridge.mark_selected", text="Mark TX")
-            op.role = "TX"
-            op = row.operator("sionna_bridge.mark_selected", text="Mark RX")
-            op.role = "RX"
-            row.operator("sionna_bridge.clear_role", text="Clear", icon="X")
-
-            active = context.active_object
-            active_role = str(active.get("sionna_role", "")).upper() if active is not None else ""
-            sub = box.box()
-            expanded_antenna = bool(settings.ui_show_device_antenna)
-            sub.prop(
-                settings, "ui_show_device_antenna", text="Per-device Orientation",
-                icon="TRIA_DOWN" if expanded_antenna else "TRIA_RIGHT", emboss=False,
-            )
-            if expanded_antenna:
-                if active is None or active_role not in {"TX", "RX"}:
-                    sub.label(text="Select a marked TX or RX", icon="INFO")
-                else:
-                    config = active.sionna_device_config
-                    if active_role == "TX":
-                        sub.prop(config, "tx_power_dbm", text="Transmit Power (dBm)")
-                    sub.prop(config, "orientation_mode")
-                    if config.orientation_mode == "LOOK_AT":
-                        sub.prop(config, "look_at_target")
-                        if config.look_at_target == active:
-                            sub.label(text="A device cannot look at itself", icon="ERROR")
-                    elif config.orientation_mode == "FIXED":
-                        row = sub.row(align=True)
-                        row.prop(config, "fixed_alpha")
-                        row.prop(config, "fixed_beta")
-                        row.prop(config, "fixed_gamma")
-                    row = sub.row(align=True)
-                    row.operator("sionna_bridge.read_device_name", text="Read Name", icon="IMPORT")
-                    row.operator("sionna_bridge.apply_device_name", text="Apply Compact Name", icon="CHECKMARK")
-
-            # Reusable TX/RX motion templates
-            motion_box = box.box()
-            motion_box.prop(
-                settings, "motion_template_enabled",
-                text="TX / RX Motion Path", icon="ANIM",
-            )
-            if settings.motion_template_enabled:
-                motion_box.prop(settings, "motion_template_style", text="Style")
-                motion_box.prop(settings, "motion_template_device", text="Associated TX / RX")
-                if settings.motion_template_style == "GRID":
-                    row = motion_box.row(align=True)
-                    row.prop(settings, "motion_template_grid_columns", text="Columns")
-                    row.prop(settings, "motion_template_grid_rows", text="Rows")
-                    row = motion_box.row(align=True)
-                    row.prop(settings, "motion_template_grid_column_spacing", text="Column Spacing")
-                    row.prop(settings, "motion_template_grid_row_spacing", text="Row Spacing")
-                    motion_box.prop(settings, "motion_template_start_frame", text="Start Frame")
-                    motion_box.prop(settings, "motion_template_set_scene_range", text="Set Scene Range to Path")
-                    count = (
-                        int(settings.motion_template_grid_columns)
-                        * int(settings.motion_template_grid_rows)
-                    )
-                    end_frame = int(settings.motion_template_start_frame) + max(0, count - 1)
-                    motion_box.label(
-                        text=f"{count} points = frames {int(settings.motion_template_start_frame)}-{end_frame}; serpentine order.",
-                        icon="INFO",
-                    )
-                    motion_box.label(
-                        text="Use Timeline Auto/Range to compute the complete grid sweep.",
-                        icon="INFO",
-                    )
-                elif settings.motion_template_style == "POINT_CLOUD":
-                    motion_box.prop(settings, "motion_template_pointcloud", text="PointCloud Path")
-                    motion_box.prop(settings, "motion_template_start_frame", text="Start Frame")
-                    motion_box.prop(settings, "motion_template_set_scene_range", text="Set Scene Range to Path")
-                    source = settings.motion_template_pointcloud
-                    count = len(source.data.points) if source is not None and source.data is not None else 0
-                    end_frame = int(settings.motion_template_start_frame) + max(0, count - 1)
-                    if source is None:
-                        motion_box.label(text="Choose a PointCloud with the eyedropper.", icon="EYEDROPPER")
-                    elif count < 1:
-                        motion_box.label(text=f"{source.name} contains no points.", icon="ERROR")
-                    else:
-                        motion_box.label(
-                            text=f"{count} points = frames {int(settings.motion_template_start_frame)}-{end_frame}.",
-                            icon="INFO",
-                        )
-                        motion_box.label(
-                            text="Mapping: point index i → frame Start+i (one frame per point).",
-                            icon="INFO",
-                        )
-
-                template_device = settings.motion_template_device
-                existing_template = (
-                    _sweep_template_object(template_device)
-                    if template_device is not None else None
-                )
-                row = motion_box.row(align=True)
-                source_ready = (
-                    settings.motion_template_style != "POINT_CLOUD"
-                    or settings.motion_template_pointcloud is not None
-                )
-                row.enabled = template_device is not None and source_ready
-                is_pc = settings.motion_template_style == "POINT_CLOUD"
-                row.operator(
-                    "sionna_bridge.generate_motion_template",
-                    text=(
-                        "Update PointCloud Path" if existing_template is not None and is_pc
-                        else "Connect PointCloud Path" if is_pc
-                        else "Update Grid" if existing_template is not None
-                        else "Generate Grid"
-                    ),
-                    icon="ANIM",
-                )
-                if existing_template is not None:
-                    row = motion_box.row(align=True)
-                    row.operator(
-                        "sionna_bridge.select_motion_template",
-                        text="Select Source" if is_pc else "Select Grid",
-                        icon="POINTCLOUD_DATA" if is_pc else "EMPTY_AXIS",
-                    )
-                    row.operator(
-                        "sionna_bridge.remove_motion_template",
-                        text="Disconnect", icon="X",
-                    )
-                    if is_pc:
-                        source_obj = _sweep_source_object(template_device)
-                        source_name = source_obj.name if source_obj is not None else "missing source"
-                        motion_box.label(
-                            text=f"Live index follow: {source_name}; point index follows the current frame.",
-                            icon="INFO",
-                        )
-                        if source_obj is not None:
-                            try:
-                                start = int(template_device.get("sionna_sweep_start_frame", 1))
-                                raw_index = int(context.scene.frame_current) - start
-                                count_now = len(source_obj.data.points)
-                                index_now = max(0, min(raw_index, max(0, count_now - 1)))
-                                expected = source_obj.matrix_world @ source_obj.data.points[index_now].co
-                                actual = template_device.matrix_world.translation
-                                error_m = float((actual - expected).length)
-                                motion_box.label(
-                                    text=(
-                                        f"Frame {context.scene.frame_current} → point {index_now}; "
-                                        f"alignment error {error_m:.6g} m"
-                                    ),
-                                    icon="CHECKMARK" if error_m <= 1e-5 else "ERROR",
-                                )
-                            except Exception:
-                                pass
-                    else:
-                        motion_box.label(
-                            text=f"Connected: {existing_template.name}. Move/rotate/scale the grid to reposition the sweep.",
-                            icon="INFO",
-                        )
-                elif template_device is None:
-                    motion_box.label(text="Choose a marked TX or RX to create the sweep.", icon="INFO")
-                elif is_pc and settings.motion_template_pointcloud is None:
-                    motion_box.label(text="Choose the PointCloud path before connecting.", icon="INFO")
-                elif not is_pc:
-                    motion_box.label(
-                        text="The grid is centered on the device when generated and stays fully movable.",
-                        icon="INFO",
-                    )
-
-        # Simulation and scene cache
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_scene_cache", "Simulation", "PLAY"
-        ):
-            dynamic_box = box.box()
-            dynamic_box.prop(
-                settings, "dynamic_mode", text="Dynamic Mode", icon="FILE_REFRESH"
-            )
-            if settings.dynamic_mode:
-                dynamic_box.label(
-                    text="TX/RX movement watcher active", icon="CHECKMARK"
-                )
-                dynamic_box.prop(settings, "auto_compute_paths_delay", text="Move Debounce")
-            else:
-                dynamic_box.label(
-                    text="Off: no movement-driven Sionna background watcher", icon="INFO"
-                )
-            box.prop(settings, "refresh_scene_before_run")
-            box.prop(settings, "export_format", text="Export Results")
-            if settings.export_format == "NONE":
-                box.label(text="Results stay in Blender; temporary worker files are removed.", icon="INFO")
-            elif settings.export_format == "CSV":
-                box.label(text="Keeps one simulation-specific CSV + metadata JSON.", icon="INFO")
-            else:
-                box.label(text="Keeps one HDF5 with frame-stacked coverage + metadata JSON.", icon="INFO")
-                tile_dataset = _find_tile_spatial_dataset()
-                if tile_dataset is not None:
-                    box.label(
-                        text=f"Tile_spacial_dataset detected: {len(tile_dataset.data.points)} tiles will be linked",
-                        icon="LINKED",
-                    )
-                else:
-                    box.label(
-                        text="No Tile_spacial_dataset detected; HDF5 coverage exports remain standalone",
-                        icon="INFO",
-                    )
-            selected = []
-            if settings.simulate_paths:
-                selected.append("Paths")
-            if settings.simulate_radio_map:
-                selected.append("Radio Map")
-            if settings.simulate_radio_map_3d:
-                selected.append("3D Radio Map")
-            row = box.row()
-            row.scale_y = 1.5
-            row.enabled = _processes_idle() and bool(selected)
-            row.operator("sionna_bridge.run_selected", text="Run Simulation", icon="PLAY")
-            row = box.row(align=True)
-            row.operator("sionna_bridge.export_scene", text="Refresh Scene Cache")
-            row.operator("sionna_bridge.open_last_run", text="Open Last Run")
-
-        # Path output toggle and options
-        box = layout.box()
-        header = box.row(align=True)
-        header.prop(settings, "simulate_paths", text="")
-        expanded = bool(settings.ui_show_paths)
-        header.prop(
-            settings, "ui_show_paths", text="Propagation Paths",
-            icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False,
-        )
-        if settings.simulate_paths and expanded:
-            live_box = box.box()
-            live_box.enabled = bool(settings.dynamic_mode)
-            live_box.prop(
-                settings, "auto_compute_paths_on_tx_move",
-                text="Auto Compute on TX / RX Move", icon="FILE_REFRESH",
-            )
-            if not settings.dynamic_mode:
-                live_box.label(text="Enable Dynamic Mode in Simulation for live updates.", icon="INFO")
-            elif settings.auto_compute_paths_on_tx_move:
-                if tx_count == 0:
-                    live_box.label(text="Add at least one TX to enable automatic runs.", icon="ERROR")
-                elif rx_count == 0:
-                    live_box.label(text="Add at least one RX to enable automatic runs.", icon="ERROR")
-                else:
-                    live_box.label(
-                        text="Current frame only; newest TX/RX position wins while busy.",
-                        icon="INFO",
-                    )
-            box.prop(settings, "pointcloud_top_paths_per_pair")
-            box.prop(settings, "post_run_action")
-            if settings.post_run_action == "CURVES":
-                box.prop(settings, "max_imported_paths")
-                box.prop(settings, "path_thickness")
-            box.prop(settings, "geometry_nodes_group_name")
-            if settings.export_format == "CSV":
-                row = box.row(align=True)
-                row.operator("sionna_bridge.copy_csv_path", text="Copy Exported CSV")
-
-        # Radio-map output toggle and options
-        box = layout.box()
-        header = box.row(align=True)
-        header.prop(settings, "simulate_radio_map", text="")
-        expanded = bool(settings.ui_show_radio_map)
-        header.prop(
-            settings, "ui_show_radio_map", text="Radio Maps",
-            icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False,
-        )
-        if settings.simulate_radio_map and expanded:
-            live_box = box.box()
-            live_box.enabled = bool(settings.dynamic_mode)
-            live_box.prop(
-                settings, "auto_compute_radio_map_on_device_move",
-                text="Auto Compute on TX Move", icon="FILE_REFRESH",
-            )
-            if not settings.dynamic_mode:
-                live_box.label(text="Enable Dynamic Mode in Simulation for live updates.", icon="INFO")
-            elif settings.auto_compute_radio_map_on_device_move:
-                live_box.prop(
-                    settings, "radio_map_auto_center_on_tx",
-                    text="Center Map on Moving TX", icon="PIVOT_BOUNDBOX",
-                )
-                if tx_count == 0:
-                    live_box.label(text="Add at least one TX to enable automatic coverage.", icon="ERROR")
-                elif _normalize_radio_map_surface_mode(settings.radio_map_surface_mode) == "PROJECTED":
-                    live_box.label(
-                        text="TX centering applies to Planar Grid only; Projected Mesh uses its mesh surface.",
-                        icon="INFO",
-                    )
-                elif settings.radio_map_auto_center_on_tx:
-                    live_box.label(
-                        text="Auto runs follow moved TX in X/Y; coverage Height stays unchanged.",
-                        icon="INFO",
-                    )
-                else:
-                    live_box.label(
-                        text="Current frame only; RX movement does not affect coverage maps.",
-                        icon="INFO",
-                    )
-            box.prop(settings, "radio_map_surface_mode", text="Map Surface")
-            box.prop(settings, "radio_map_metric", text="Map Metric")
-            surface_mode = _normalize_radio_map_surface_mode(
-                settings.radio_map_surface_mode
-            )
-            if surface_mode == "PROJECTED":
-                box.prop(settings, "radio_map_reference_mesh", text="Reference Mesh")
-                if settings.radio_map_reference_mesh is None:
-                    box.label(text="Select the mesh that will receive the radio map.", icon="ERROR")
-                if settings.radio_map_metric != "path_gain":
-                    box.label(
-                        text="Projected Mesh currently supports Path Gain only.",
-                        icon="ERROR",
-                    )
-            else:
-                row = box.row(align=True)
-                row.prop(settings, "radio_map_center_x")
-                row.prop(settings, "radio_map_center_y")
-                box.prop(settings, "radio_map_height")
-                row = box.row(align=True)
-                row.prop(settings, "radio_map_size_x")
-                row.prop(settings, "radio_map_size_y")
-                row = box.row(align=True)
-                row.prop(settings, "radio_map_cell_size_x")
-                row.prop(settings, "radio_map_cell_size_y")
-            box.prop(settings, "radio_map_point_radius")
-            box.prop(settings, "radio_map_replace_existing")
-            if settings.export_format == "CSV":
-                row = box.row(align=True)
-                row.operator("sionna_bridge.copy_radio_map_csv", text="Copy Exported CSV")
-
-        # 3D radio-map output toggle and options
-        box = layout.box()
-        header = box.row(align=True)
-        header.prop(settings, "simulate_radio_map_3d", text="")
-        expanded = bool(settings.ui_show_radio_map_3d)
-        header.prop(
-            settings, "ui_show_radio_map_3d", text="3D Radio Maps",
-            icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False,
-        )
-        if settings.simulate_radio_map_3d and expanded:
-            live_box = box.box()
-            live_box.enabled = bool(settings.dynamic_mode)
-            live_box.prop(
-                settings, "auto_compute_radio_map_3d_on_device_move",
-                text="Auto Compute on TX Move", icon="FILE_REFRESH",
-            )
-            if not settings.dynamic_mode:
-                live_box.label(text="Enable Dynamic Mode in Simulation for live updates.", icon="INFO")
-            elif settings.auto_compute_radio_map_3d_on_device_move:
-                live_box.prop(
-                    settings, "radio_map_3d_auto_center_on_tx",
-                    text="Center Volume on Moving TX", icon="PIVOT_BOUNDBOX",
-                )
-                if tx_count == 0:
-                    live_box.label(text="Add at least one TX to enable automatic 3D coverage.", icon="ERROR")
-                elif settings.radio_map_3d_auto_center_on_tx:
-                    live_box.label(
-                        text="Auto runs follow the moved TX in X/Y/Z; volume size stays unchanged.",
-                        icon="INFO",
-                    )
-                else:
-                    live_box.label(
-                        text="Current frame only; RX movement does not affect coverage maps.",
-                        icon="INFO",
-                    )
-            box.prop(settings, "radio_map_3d_metric", text="Map Metric")
-            row = box.row(align=True)
-            row.prop(settings, "radio_map_3d_center_x")
-            row.prop(settings, "radio_map_3d_center_y")
-            box.prop(settings, "radio_map_3d_center_z")
-            row = box.row(align=True)
-            row.prop(settings, "radio_map_3d_size_x")
-            row.prop(settings, "radio_map_3d_size_y")
-            box.prop(settings, "radio_map_3d_size_z")
-            row = box.row(align=True)
-            row.prop(settings, "radio_map_3d_cell_size_x")
-            row.prop(settings, "radio_map_3d_cell_size_y")
-            box.prop(settings, "radio_map_3d_cell_size_z")
-            box.prop(settings, "radio_map_3d_point_radius")
-            box.prop(settings, "radio_map_3d_replace_existing")
-
-        # Status
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_status", "Status", "INFO"
-        ):
-            width = max(52, int(getattr(context.region, "width", 700) / 7.2))
-            _draw_wrapped_text(box, settings.last_status, width=width, icon="INFO")
-            if settings.last_status_details:
-                detail_box = box.box()
-                detail_box.label(text="Full details", icon="TEXT")
-                _draw_wrapped_text(detail_box, settings.last_status_details, width=width)
-            row = box.row(align=True)
-            row.operator("sionna_bridge.copy_full_status", text="Copy Full Status", icon="COPY_ID")
-            row.operator("sionna_bridge.open_status_log", text="Open Log / Run Folder", icon="FILE_FOLDER")
-            try:
-                export_report = (
-                    json.loads(settings.procedural_export_report_json)
-                    if settings.procedural_export_report_json else {}
-                )
-            except Exception:
-                export_report = {}
-            failed_exports = export_report.get("failed_frames", []) if isinstance(export_report, dict) else []
-            if failed_exports:
-                sub = box.box()
-                sub.label(
-                    text=(
-                        f"Procedural export: {len(export_report.get('exported_frames', []))} succeeded, "
-                        f"{len(failed_exports)} skipped"
-                    ),
-                    icon="ERROR",
-                )
-                for item in failed_exports[:20]:
-                    reason = str(item.get("reason", "Unknown export error")).replace("\n", " ")
-                    if len(reason) > 105:
-                        reason = reason[:102] + "..."
-                    sub.label(text=f"F{int(item.get('frame', 0)):04d}: {reason}")
-                if len(failed_exports) > 20:
-                    sub.label(text=f"...and {len(failed_exports) - 20} more failed frame(s)")
-                if settings.procedural_export_report_path:
-                    sub.label(text=f"Report: {Path(settings.procedural_export_report_path).name}")
-            if settings.last_paths_object:
-                box.label(text=f"Paths object: {settings.last_paths_object}", icon="POINTCLOUD_DATA")
-            if settings.last_radio_map_object:
-                box.label(text=f"Radio map object: {settings.last_radio_map_object}", icon="POINTCLOUD_DATA")
-            if settings.last_radio_map_3d_object:
-                box.label(text=f"3D radio map: {settings.last_radio_map_3d_object}", icon="VOLUME_DATA")
-            if settings.last_export_path:
-                export_label = "HDF5" if str(settings.last_export_path).lower().endswith((".h5", ".hdf5")) else "CSV"
-                box.label(text=f"Last {export_label} export: {Path(settings.last_export_path).name}", icon="FILE")
-            if settings.last_export_metadata_path:
-                box.label(text=f"Metadata: {Path(settings.last_export_metadata_path).name}", icon="TEXT")
-
-        # Analytics
-        box = layout.box()
-        if _draw_collapsible_header(
-            box, settings, "ui_show_analytics", "Analytics", "GRAPH"
-        ):
-            row = box.row(align=True)
-            row.prop(settings, "analytics_source", text="")
-            row.prop(settings, "analytics_scope", text="")
-            box.prop(settings, "analytics_auto_refresh")
-            if settings.analytics_source == "PATHS":
-                controls = box.box()
-                controls.label(text="Channel analysis")
-                row = controls.row(align=True)
-                row.prop(settings, "analytics_pair_index")
-                row.prop(settings, "analytics_delay_reference", text="")
-                row = controls.row(align=True)
-                row.prop(settings, "analytics_significant_path_threshold_db")
-                row.prop(settings, "analytics_pdp_bins")
-                controls.prop(settings, "analytics_cir_component_limit")
-                controls.label(
-                    text="CIR component and PDP limits apply to the next simulation.",
-                    icon="INFO",
-                )
-            else:
-                box.prop(settings, "analytics_map_threshold")
-            if settings.analytics_scope == "ALL":
-                box.prop(settings, "analytics_geometry_metric")
-            row = box.row(align=True)
-            row.operator("sionna_bridge.refresh_analytics", text="Refresh", icon="FILE_REFRESH")
-            row.operator(
-                "sionna_bridge.open_analytics_dashboard",
-                text="Open Plots", icon="GRAPH",
-            )
-            try:
-                analytics = json.loads(settings.analytics_json) if settings.analytics_json else {}
-            except Exception:
-                analytics = {}
-            if not analytics:
-                box.label(text="Run a simulation or press Refresh.", icon="INFO")
-            elif analytics.get("source") == "PATHS":
-                box.label(text=f"Source: {analytics.get('object', '—')}", icon="POINTCLOUD_DATA")
-                row = box.row(align=True)
-                row.label(text=f"Paths: {int(analytics.get('path_count', 0)):,}")
-                row.label(text=f"Links: {int(analytics.get('link_count', 0)):,}")
-                row.label(text=f"Frames: {int(analytics.get('frame_count', 0)):,}")
-                gain = analytics.get("gain_db", {})
-                distance = analytics.get("distance_m", {})
-                channel_power = analytics.get("channel_total_power_db", {})
-                rms_delay = analytics.get("rms_delay_spread_ns", {})
-                first_arrival = analytics.get("first_arrival_ns", {})
-                dominant = analytics.get("dominant_to_rest_db", {})
-                row = box.row(align=True)
-                row.label(text=f"Channel power: {float(channel_power.get('mean', 0.0)):.2f} dB")
-                row.label(text=f"RMS delay: {float(rms_delay.get('mean', 0.0)):.3g} ns")
-                row = box.row(align=True)
-                row.label(text=f"First arrival: {float(first_arrival.get('mean', 0.0)):.3g} ns")
-                row.label(text=f"LoS links: {float(analytics.get('los_link_percent', 0.0)):.1f}%")
-                row = box.row(align=True)
-                row.label(text=f"Dominant/rest: {float(dominant.get('mean', 0.0)):.2f} dB")
-                row.label(text=f"Best path: {float(gain.get('max', 0.0)):.2f} dB")
-                row = box.row(align=True)
-                row.label(text=f"TX/RX mean: {float(distance.get('mean', 0.0)):.3g} m")
-                row.label(text=f"Links analyzed: {int(analytics.get('channel_link_count', 0)):,}")
-                if analytics.get("mobility_available"):
-                    doppler_abs = analytics.get("doppler_abs_hz", {})
-                    doppler_spread = analytics.get("rms_doppler_spread_hz", {})
-                    tx_speed = analytics.get("tx_speed_m_s", {})
-                    rx_speed = analytics.get("rx_speed_m_s", {})
-                    row = box.row(align=True)
-                    row.label(text=f"Max |Doppler|: {float(doppler_abs.get('max', 0.0)):.3g} Hz")
-                    row.label(text=f"RMS Doppler: {float(doppler_spread.get('mean', 0.0)):.3g} Hz")
-                    row = box.row(align=True)
-                    row.label(text=f"TX speed: {float(tx_speed.get('mean', 0.0)):.3g} m/s")
-                    row.label(text=f"RX speed: {float(rx_speed.get('mean', 0.0)):.3g} m/s")
-                selected_channel = analytics.get("selected_channel") or {}
-                if selected_channel:
-                    sub = box.box()
-                    sub.label(text=(
-                        f"CIR/PDP selection: F{int(selected_channel.get('frame', 0))} · "
-                        f"Pair {int(selected_channel.get('pos_idx', 0))}"
-                    ))
-                    row = sub.row(align=True)
-                    row.label(text=f"Paths: {int(selected_channel.get('path_count', 0)):,}")
-                    row.label(text=f"RMS: {float(selected_channel.get('rms_delay_spread_ns', 0.0) or 0.0):.3g} ns")
-                    row = sub.row(align=True)
-                    row.label(text=f"Power: {float(selected_channel.get('total_power_db', -600.0)):.2f} dB")
-                    row.label(text=f"LoS: {'Yes' if selected_channel.get('los_available') else 'No'}")
-                    if analytics.get("mobility_available"):
-                        row = sub.row(align=True)
-                        row.label(text=f"Mean Doppler: {float(selected_channel.get('doppler_mean_hz', 0.0)):.3g} Hz")
-                        row.label(text=f"RMS spread: {float(selected_channel.get('rms_doppler_spread_hz', 0.0)):.3g} Hz")
-                types = analytics.get("path_types", {})
-                if types:
-                    sub = box.box()
-                    sub.label(text="Path types")
-                    total = max(1, int(analytics.get("path_count", 0)))
-                    for name, value in sorted(types.items(), key=lambda item: (-item[1], item[0])):
-                        row = sub.row(align=True)
-                        row.label(text=name)
-                        row.label(text=f"{int(value):,}  ({100.0*int(value)/total:.1f}%)")
-                top_paths = analytics.get("top_paths", [])[: int(settings.analytics_top_rows)]
-                if top_paths:
-                    box.prop(settings, "analytics_top_rows")
-                    sub = box.box()
-                    sub.label(text="Strongest paths")
-                    for item in top_paths:
-                        sub.label(
-                            text=(
-                                f"F{int(item.get('frame', 0))} Pair {int(item.get('pos_idx', 0))} · "
-                                f"{item.get('path_type', 'Other')} · "
-                                f"{float(item.get('path_gain_db', 0.0)):.2f} dB · "
-                                f"{float(item.get('delay_ns', 0.0)):.3g} ns · "
-                                f"{float(item.get('doppler_hz', 0.0)):+.3g} Hz"
-                            )
-                        )
-            else:
-                label = "2D radio map" if analytics.get("source") == "RADIO_MAP" else "3D radio map"
-                box.label(text=f"Source: {analytics.get('object', '—')}", icon="POINTCLOUD_DATA")
-                row = box.row(align=True)
-                row.label(text=f"{label}: {int(analytics.get('point_count', 0)):,} points")
-                row.label(text=f"Frames: {int(analytics.get('frame_count', 0)):,}")
-                gain = analytics.get("gain_db", {})
-                percentiles = analytics.get("percentiles", {})
-                metric_label = analytics.get("metric_label", "Metric")
-                metric_unit = analytics.get("metric_unit", "dB")
-                row = box.row(align=True)
-                row.label(text=f"P5: {float(percentiles.get('5', 0.0)):.2f} {metric_unit}")
-                row.label(text=f"Median: {float(percentiles.get('50', 0.0)):.2f} {metric_unit}")
-                row.label(text=f"P95: {float(percentiles.get('95', 0.0)):.2f} {metric_unit}")
-                row = box.row(align=True)
-                threshold = float(analytics.get("coverage_threshold", 0.0))
-                row.label(text=f"Coverage ≥ {threshold:g}: {float(analytics.get('coverage_above_threshold_percent', 0.0)):.1f}%")
-                row.label(text=f"Outage: {float(analytics.get('outage_below_threshold_percent', 0.0)):.1f}%")
-                row = box.row(align=True)
-                row.label(text=f"Strongest: {float(gain.get('max', 0.0)):.2f} {metric_unit}")
-                row.label(text=f"Valid values: {float(analytics.get('valid_percent', 0.0)):.1f}%")
-                association = analytics.get("tx_association") or {}
-                if association.get("available"):
-                    dominant = association.get("dominant") or {}
-                    row = box.row(align=True)
-                    row.label(text=f"Associated TXs: {int(association.get('tx_count', 0))}")
-                    row.label(text=(
-                        f"Dominant: {dominant.get('name', '—')} "
-                        f"({float(dominant.get('share_percent', 0.0)):.1f}%)"
-                    ))
-                    row = box.row(align=True)
-                    row.label(text=f"Unassociated: {float(association.get('unassociated_percent', 0.0)):.1f}%")
-                    row.label(text=f"Attribute: associated_tx ({analytics.get('metric_label', 'metric')})")
-                if analytics.get("source") == "RADIO_MAP_3D":
-                    row.label(text=f"Layers: {int(analytics.get('layer_count', 0)):,}")
-
-            animation = analytics.get("procedural_animation") or {}
-            if animation:
-                sub = box.box()
-                sub.label(text="Procedural animation", icon="ANIM")
-                row = sub.row(align=True)
-                row.label(text=f"Frames: {int(animation.get('frame_count', 0)):,}")
-                row.label(text=f"States: {int(animation.get('distinct_geometry_states', 0)):,}")
-                row.label(text=f"Descriptor: {animation.get('geometry_label', 'Geometry')}")
-                geometry = animation.get("geometry_stats", {})
-                unit = animation.get("geometry_unit", "")
-                row = sub.row(align=True)
-                row.label(text=(
-                    f"Range: {float(geometry.get('min', 0.0)):.4g}–"
-                    f"{float(geometry.get('max', 0.0)):.4g}{(' ' + unit) if unit else ''}"
-                ))
-                row.label(text=(
-                    f"Largest change: F{int(animation.get('max_change_frame', 0))} "
-                    f"({float(animation.get('max_change_percent', 0.0)):+.2f}%)"
-                ))
-                row = sub.row(align=True)
-                if analytics.get("source") == "PATHS":
-                    row.label(text=f"Power r: {_correlation_text(animation.get('correlation_channel_power'))}")
-                    row.label(text=f"RMS delay r: {_correlation_text(animation.get('correlation_rms_delay'))}")
-                    row.label(text=f"Paths r: {_correlation_text(animation.get('correlation_path_count'))}")
-                else:
-                    row.label(text=f"Metric r: {_correlation_text(animation.get('correlation_metric'))}")
-                    row.label(text=f"Coverage r: {_correlation_text(animation.get('correlation_coverage'))}")
-                sub.label(
-                    text="Open Plots for frame trends, correlations, and the frame table.",
-                    icon="INFO",
-                )
-            elif settings.analytics_scope == "ALL" and _procedural_scene_active(context.scene):
-                box.label(
-                    text="Run a new procedural simulation with geometry statistics enabled.",
-                    icon="INFO",
-                )
-
 def _post_register_init_timer():
     """Finish scene-dependent initialization after Blender registration.
 
@@ -12165,10 +11846,17 @@ def _post_register_init_timer():
     return None
 
 
+from .ui_panels import build_panels
+_UI_CLASSES = build_panels(sys.modules[__name__])
+
 _CLASSES = (
     SIONNA_PG_DeviceConfig,
     SIONNA_PG_MaterialConfig,
     SIONNA_PG_Settings,
+    SIONNA_OT_SelectPlantMaterial,
+    SIONNA_OT_PlantSolverSettings,
+    SIONNA_OT_PlantMaterialReference,
+    SIONNA_OT_VegetationMeasurements,
     SIONNA_OT_CreateDefaultMaterials,
     SIONNA_OT_PickActiveMaterial,
     SIONNA_OT_EnableMaterial,
@@ -12187,7 +11875,10 @@ _CLASSES = (
     SIONNA_OT_SyncRoleNames,
     SIONNA_OT_TestEnvironment,
     SIONNA_OT_ExportScene,
+    SIONNA_OT_HumanMaterial,
+    SIONNA_OT_ISACOverlay,
     SIONNA_OT_RunSelected,
+    SIONNA_OT_CancelRun,
     SIONNA_OT_Run,
     SIONNA_OT_RunCached,
     SIONNA_OT_GenerateRadioMap,
@@ -12201,16 +11892,20 @@ _CLASSES = (
     SIONNA_OT_CopyCSVPattern,
     SIONNA_OT_OpenCSVFolder,
     SIONNA_OT_OpenWorkspace,
+    SIONNA_OT_OpenGeometryNodesMetadata,
     SIONNA_OT_OpenLastRun,
     SIONNA_OT_CopyFullStatus,
     SIONNA_OT_OpenStatusLog,
+    SIONNA_OT_OpenParameterPlots,
+    SIONNA_OT_ImportParameterRun,
     SIONNA_OT_RefreshAnalytics,
     SIONNA_OT_OpenAnalyticsDashboard,
-    SIONNA_PT_MainPanel,
-)
+) + _UI_CLASSES
 
 
 def register():
+    if _cancel_runs_before_load not in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.append(_cancel_runs_before_load)
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.Scene.sionna_bridge = PointerProperty(type=SIONNA_PG_Settings)
@@ -12220,6 +11915,8 @@ def register():
         bpy.app.handlers.load_post.append(_device_representation_load_post)
     if _auto_path_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_auto_path_load_post)
+    for handlers in (bpy.app.handlers.frame_change_post, bpy.app.handlers.render_pre):
+        if _isac_hud.update not in handlers: handlers.append(_isac_hud.update)
     if _bundled_geometry_nodes_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_bundled_geometry_nodes_load_post)
 
@@ -12235,6 +11932,11 @@ def register():
 
 
 def unregister():
+    _cancel_active_runs("Extension disabled")
+    if _cancel_runs_before_load in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(_cancel_runs_before_load)
+    for handlers in (bpy.app.handlers.frame_change_post, bpy.app.handlers.render_pre):
+        while _isac_hud.update in handlers: handlers.remove(_isac_hud.update)
     global _DEVICE_REPRESENTATION_SYNC_PENDING, _DEVICE_REPRESENTATION_SYNC_GUARD
     _DEVICE_REPRESENTATION_SYNC_PENDING = False
     _DEVICE_REPRESENTATION_SYNC_GUARD = False

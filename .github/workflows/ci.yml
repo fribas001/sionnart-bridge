@@ -26,6 +26,17 @@ jobs:
       - name: Run tests
         run: pytest
 
+      - name: Run portable extension tests
+        run: python -m unittest discover -s src/sionnart_bridge/tests -p "test_*.py"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check report JavaScript
+        run: node src/sionnart_bridge/tests/test_report_math.cjs
+
       - name: Check release metadata
         run: python scripts/check_release.py
 

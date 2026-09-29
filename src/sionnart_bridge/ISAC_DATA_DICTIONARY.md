@@ -1,0 +1,22 @@
+# Synthetic ISAC dataset dictionary — schema 1
+
+All positions use exported Blender world XYZ with Z up, interpreted in metres by the bridge. Rotations/matrices follow Blender world coordinates. Time is `(frame - scene.frame_start) / (fps / fps_base)` seconds. A frame is a frozen evaluated scene.
+
+- `dataset_manifest.json`: schema, synthetic flag, bridge/runtime versions, exporter hash, dataset IDs/license/options, antenna/material configuration, completed frame records and complete/partial status. Complete means all frames in the prepared worker configuration completed, not that a scientific dataset is validated. Consult the parent run's export report if frames were skipped during preparation.
+- `frame_index.csv`: frame, time_seconds, relative directory, activity.
+- `scenes/Fxxxxxx/scene.xml` and `assets/`: portable evaluated geometry used for that frame. Frame summary lists SHA-256 hashes, including the XML. Physical material parameters are also supplied through the parent run configuration, so XML alone does not reproduce every worker override.
+- `Fxxxxxx/channels.npz`: NumPy archive; no pickled objects. `cir` is native complex baseband a, axes `[rx, rx_antenna, tx, tx_antenna, path, time_sample]` with one time sample. `delay_s` has the same axes without time_sample. `native_delay_s` preserves the original native delay shape (three axes RX/TX/path for synthetic arrays, five otherwise); `delay_s` broadcasts shared delays over antenna elements. `valid` has the delay shape, requiring finite coefficients and finite delay >=0. Invalid slots are retained in raw arrays; use this mask. Antenna/path dimensions are not truncated by the display limit.
+- Optional `csi`: complex frequency response axes `[rx, rx_antenna, tx, tx_antenna, frequency]`; `frequency_offset_hz`: centered uniform grid `(k - floor(N/2))*bandwidth/N`. `H(f)=sum_p a_p exp(-j 2 pi f tau_p)` over valid paths, where f is the baseband offset. No second carrier phase is applied.
+- Optional `cir_components.csv`: one valid path per antenna pair per row; zero-based RX/TX/antenna/path indices, device names, absolute delay_s, real/imag of a, dimensionless power_linear = |a|². Path indices are local to a snapshot and do not identify trajectories across frames.
+- `link_statistics.csv` and summary links: per antenna pair. coherent_gain_linear = |sum a|² (channel gain at zero baseband offset); incoherent_gain_linear = sum |a|²; their dB values use 10 log10. mean_path_gain_db = 10 log10(sum |a|² / valid_paths), a linear-power average before conversion. Mean delay is power-weighted; RMS delay spread is the power-weighted standard deviation. Zero power has null dB/delay moments, not fabricated finite values. CSV nulls are blank.
+- `ground_truth.json`: user/timeline activity label, selected subject and evaluated objects. Each object has name/type, world matrix and origin. Meshes have evaluated vertex count, world bounding box, vertex centroid and material names. The centroid is a geometric vertex average, not a centre of mass. Armature bones have world head/tail and pose matrix; no guessed anatomical mapping. A selected mesh exports its own subtree; choose the armature to include its skeleton and all attached body meshes.
+- `skeleton.csv`: armature object, bone name, world head/tail coordinates in metres. Empty apart from header when no armature is selected.
+- `summary.json`: synchronized time/frame, IDs, activity, simulation and device settings, array axes, conventions, statistics, scene hashes and plot errors. Plot failures are recorded without discarding raw channels.
+- Optional `cir_txNNN_rxNNN.png`: absolute-delay CIR magnitude and path-power stems for antenna 0/0. No interpolation or delay normalization.
+- `completion.json`: hashes of frame files written before the receipt. `dataset_manifest.json` is updated after each successful frame; interrupted runs can be partial. Verify receipts before ingesting data.
+
+These are synthetic frozen-pose channels, with no calibrated articulated-body micro-Doppler, Wi-Fi packet capture or fall-detection prediction. Dataset license and expert validation are separate from the add-on's GPL license.
+
+## v1.21.1 additions
+
+Frame summary `materials` remains configured input metadata. `resolved_radio_materials` records actual solver properties at its `frequency_hz`, including fallback materials and merged object/material mappings. `exported_shape_material_bindings` maps original XML shape IDs to material IDs before merging. Ground-truth bones additionally have a `parent` name or null.
