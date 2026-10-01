@@ -1,4 +1,4 @@
-# SionnaRT-Bridge 2.0.0
+# SionnaRT-Bridge 2.1.0
 
 Blender scene preparation, procedural sweeps, Sionna RT simulation, spatial visualization and parameter analysis.
 
@@ -55,6 +55,25 @@ Match data by run ID, frame, output category and TX/RX identity. Prepared input 
 ## Visualization scope
 
 Planar and stacked-height maps support path gain, RSS and SINR. The 3D result is a stack of horizontal samples. Projected maps use mesh triangles as measurement cells and support path gain. Bundled Geometry Nodes groups are loaded automatically; existing user-edited groups are preserved. Optional curve paths coexist with embedded results and parameter analysis.
+
+### Oriented 2D radio maps
+
+Under **2D Radio Map**, choose **Map Surface: Planar Grid** and **Map Plane**:
+
+- **XY (Horizontal)** is the default, including for projects saved with earlier releases.
+- **XZ (Vertical)** uses local X/Z axes; position the slice with Center Y.
+- **YZ (Vertical)** uses local Y/Z axes; position the slice with Center X.
+- **Custom Rotation** exposes Blender XYZ Euler angles. At zero rotation the map is XY. All three angles can be keyframed; AUTO timeline detection includes their animation.
+
+Center X/Y/Z always use world coordinates. For XY, Center Z is labelled Height. Area and cell sizes follow the selected plane axes; custom planes label these U/V. For example, an XZ map with Area Size X = 50 m and Area Size Z = 20 m is a vertical 50-by-20-m slice. Position its center halfway up the desired vertical extent. Keep the TX outside the measurement plane to avoid a coplanar sampling configuration.
+
+The worker passes Sionna `(alpha, beta, gamma) = (Rotation Z, Rotation Y, Rotation X)` in radians, using `Rz(alpha) Ry(beta) Rx(gamma)`. This is the convention in the [official Sionna radio-map documentation](https://nvlabs.github.io/sionna/rt/api/radio_maps.html) and the installed Sionna RT 2.1.0 implementation. Orientation rotates the measurement grid, not the antennas or scene geometry. Map values retain the selected antenna configuration.
+
+New planar visualizers use rectangular tiles at the computed world positions, with their full in-plane rotation and independently sized sides. Frame filtering, metric threshold, color and opacity remain available through Geometry Nodes. New `*_oriented_node` groups are separate from legacy groups so saved results and user edits are preserved; new simulations select the oriented groups automatically. Existing simulated data is not rotated or recalculated when settings change: run the simulation again.
+
+CSV contains world `x/y/z`, world normal/tangent/bitangent components, and Blender `rotation_x/y/z` in radians. Metadata records the orientation per frame. HDF5 retains `frame,y,x` tensor order for compatibility: here y/x index local V/U, not necessarily world Y/X. `plane_center`, `plane_orientation`, `plane_basis` (rows U/V/normal), and `plane_u/plane_v` describe the plane; `cell_centers` supplies authoritative world positions. Coordinates that change across frames retain their frame axis. Projected Mesh continues to use the selected mesh's orientation; 3D maps remain horizontal slice stacks.
+
+With automatic TX centering enabled, the 2D center follows the transmitter within the measurement plane and preserves the plane's position along its normal. For XY this keeps the existing behavior: X/Y follow the TX and Height stays fixed.
 
 ## Optional sensing workflow
 

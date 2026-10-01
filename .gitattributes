@@ -4,3 +4,6 @@
 *.jpg binary
 *.zip binary
 *.pdf binary
+
+# Preserve the exact bytes of the tested extension distribution.
+src/sionnart_bridge/** -text

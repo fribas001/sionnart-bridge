@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 if __package__:
+    from .radio_map_orientation import orientation_from_payload, plane_basis
     from .worker_runtime import (
         package_version,
         now_utc,
@@ -35,6 +36,7 @@ if __package__:
         make_path_solver,
     )
 else:
+    from radio_map_orientation import orientation_from_payload, plane_basis
     from worker_runtime import (
         package_version,
         now_utc,
@@ -408,6 +410,8 @@ def build_rows(
     rows = []
     if centers.ndim == 3:
         ny, nx, _ = centers.shape
+        angles = orientation_from_payload(radio)
+        tangent, bitangent, normal = plane_basis(angles)
         cell_area = float(radio["cell_size_x"]) * float(radio["cell_size_y"])
         for iy in range(ny):
             for ix in range(nx):
@@ -422,9 +426,18 @@ def build_rows(
                     "is_projected": 0,
                     "cell_index": int(iy * nx + ix),
                     "primitive_index": -1,
-                    "normal_x": 0.0,
-                    "normal_y": 0.0,
-                    "normal_z": 1.0,
+                    "normal_x": normal[0],
+                    "normal_y": normal[1],
+                    "normal_z": normal[2],
+                    "tangent_x": tangent[0],
+                    "tangent_y": tangent[1],
+                    "tangent_z": tangent[2],
+                    "bitangent_x": bitangent[0],
+                    "bitangent_y": bitangent[1],
+                    "bitangent_z": bitangent[2],
+                    "rotation_x": angles[2],
+                    "rotation_y": angles[1],
+                    "rotation_z": angles[0],
                     "cell_area": cell_area,
                     "associated_tx": int(association[iy, ix]),
                     "coverage_valid": int(coverage_valid[iy, ix]),
@@ -603,7 +616,7 @@ def solve_frame(scene, solver, runtime, frame):
                 float(radio["center_y"]),
                 float(radio["height"]),
             ],
-            "orientation": [0.0, 0.0, 0.0],
+            "orientation": orientation_from_payload(radio),
             "size": [float(radio["size_x"]), float(radio["size_y"])],
             "cell_size": [
                 float(radio["cell_size_x"]),
@@ -638,6 +651,19 @@ def solve_frame(scene, solver, runtime, frame):
                 [row["metric_norm"] for row in rows], dtype=np.float32
             ).reshape(np.asarray(linear).shape),
         }
+        if surface_cells is None:
+            angles = orientation_from_payload(radio)
+            basis = np.asarray(plane_basis(angles), dtype=np.float64)
+            center = np.asarray([radio["center_x"], radio["center_y"], radio["height"]])
+            # Centered local coordinates; world centers remain authoritative.
+            local = (centers - center) @ basis.T
+            npz_payload.update({
+                "plane_orientation": np.asarray(angles, dtype=np.float64),
+                "plane_center": center.astype(np.float64),
+                "plane_basis": basis,
+                "plane_u": local[0, :, 0],
+                "plane_v": local[:, 0, 1],
+            })
         if surface_cells is not None:
             tx_linear, tx_db = metric_db(values_by_tx, metric)
             npz_payload.update({

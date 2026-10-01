@@ -1,0 +1,56 @@
+[
+  {
+    "claim": "Five foliage sequences and 17.03 dB median full-to-minimum change",
+    "files": [
+      "data/foliage_r1",
+      "data/foliage_r2",
+      "data/foliage_r3",
+      "data/foliage_r4",
+      "data/foliage_r5"
+    ],
+    "reproduce": "scripts/analyze_paper.py",
+    "evidence": "50 original scenes and full arrays"
+  },
+  {
+    "claim": "Sampling sensitivity of the smallest endpoint response",
+    "files": [
+      "studies/numerical_stability"
+    ],
+    "reproduce": "studies/numerical_stability/reproduce/analyze_stability.py",
+    "evidence": "30 original raw results"
+  },
+  {
+    "claim": "45.3 dB generator-ensemble range and geometry associations",
+    "files": [
+      "data/seed_ensemble"
+    ],
+    "reproduce": "scripts/analyze_paper.py",
+    "evidence": "50 original summaries and controls; reconstructed scenes; fresh native rechecks in validation"
+  },
+  {
+    "claim": "Native and Blender route numerical agreement and timing",
+    "files": [
+      "studies/native_comparison"
+    ],
+    "reproduce": "scripts/run_blender_comparison.py",
+    "evidence": "24 original route calculations plus 3 alignment checks; not a human-effort measurement"
+  },
+  {
+    "claim": "Exploratory depth and ray-budget sweeps in supplement",
+    "files": [
+      "data/exploratory_depth",
+      "data/exploratory_rays"
+    ],
+    "reproduce": "scripts/run_study.py",
+    "evidence": "40 original summaries; reconstructed scenes; ray sweep nondeterministic"
+  },
+  {
+    "claim": "Procedural and attributed-result visualization",
+    "files": [
+      "blender/Procedural_Vegetation_reproducible.blend",
+      "publication/Figures"
+    ],
+    "reproduce": "documentation/BLENDER_WORKFLOW.md",
+    "evidence": "editable model and renders; radio maps qualitative"
+  }
+]

@@ -1,8 +1,8 @@
 cff-version: 1.2.0
-message: "If you use SionnaRT-Bridge, cite the software version used in your experiment."
+message: "Cite the software version used. For the vegetation reproducibility dataset, also cite DOI 10.5281/zenodo.23081848; its separate citation is in reproducibility/vegetation/CITATION.cff."
 title: "SionnaRT-Bridge"
 type: software
-version: "2.0.0"
+version: "2.1.0"
 
 authors:
   - family-names: "Ribas"

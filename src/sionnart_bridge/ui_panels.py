@@ -419,7 +419,7 @@ def build_panels(bridge):
             elif bridge._normalize_radio_map_surface_mode(settings.radio_map_surface_mode) == 'PROJECTED':
                 live_box.label(text='TX centering applies to Planar Grid only; Projected Mesh uses its mesh surface.', icon='INFO')
             elif settings.radio_map_auto_center_on_tx:
-                live_box.label(text='Auto runs follow moved TX in X/Y; coverage Height stays unchanged.', icon='INFO')
+                live_box.label(text='Follow TX within the map plane; normal offset stays fixed.', icon='INFO')
             else:
                 live_box.label(text='Current frame only; RX movement does not affect coverage maps.', icon='INFO')
         box.prop(settings, 'radio_map_surface_mode', text='Map Surface')
@@ -432,16 +432,23 @@ def build_panels(bridge):
             if settings.radio_map_metric != 'path_gain':
                 box.label(text='Projected Mesh currently supports Path Gain only.', icon='ERROR')
         else:
+            box.prop(settings, 'radio_map_plane')
+            plane = settings.radio_map_plane
+            if plane == 'CUSTOM':
+                col = box.column(align=True)
+                for axis in ('x', 'y', 'z'):
+                    col.prop(settings, 'radio_map_rotation_' + axis)
+            axes = {'XY': ('X', 'Y'), 'XZ': ('X', 'Z'), 'YZ': ('Y', 'Z')}.get(plane, ('U', 'V'))
             row = box.row(align=True)
             row.prop(settings, 'radio_map_center_x')
             row.prop(settings, 'radio_map_center_y')
-            box.prop(settings, 'radio_map_height')
+            box.prop(settings, 'radio_map_height', text='Height' if plane == 'XY' else 'Center Z')
             row = box.row(align=True)
-            row.prop(settings, 'radio_map_size_x')
-            row.prop(settings, 'radio_map_size_y')
+            row.prop(settings, 'radio_map_size_x', text='Area Size ' + axes[0])
+            row.prop(settings, 'radio_map_size_y', text='Area Size ' + axes[1])
             row = box.row(align=True)
-            row.prop(settings, 'radio_map_cell_size_x')
-            row.prop(settings, 'radio_map_cell_size_y')
+            row.prop(settings, 'radio_map_cell_size_x', text='Cell Size ' + axes[0])
+            row.prop(settings, 'radio_map_cell_size_y', text='Cell Size ' + axes[1])
         box.prop(settings, 'radio_map_point_radius')
         box.prop(settings, 'radio_map_replace_existing')
         if settings.export_format == 'CSV':

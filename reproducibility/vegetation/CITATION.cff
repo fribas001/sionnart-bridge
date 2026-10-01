@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "Cite this vegetation reproducibility dataset together with the article and tested software release."
+type: dataset
+title: "SionnaRT-Bridge: reproducibility data and workflows for procedural vegetation radio-propagation experiments"
+version: 1.0.0
+license: CC-BY-4.0
+authors:
+  - family-names: "Ribas"
+    given-names: "Felipe Oliveira"
+    affiliation: "Ghent University–imec"
+  - family-names: "Vermeeren"
+    given-names: "Günter"
+    affiliation: "Ghent University–imec"
+  - family-names: "Plets"
+    given-names: "David"
+    affiliation: "Ghent University–imec"
+  - family-names: "Boom"
+    given-names: "Bas"
+    affiliation: "OnePlanet Research Center–imec"
+  - family-names: "Gaitan"
+    given-names: "Santiago"
+    affiliation: "OnePlanet Research Center–imec"
+  - family-names: "Joseph"
+    given-names: "Wout"
+    affiliation: "Ghent University–imec"
+doi: "10.5281/zenodo.23081848"
+url: "https://doi.org/10.5281/zenodo.23081848"

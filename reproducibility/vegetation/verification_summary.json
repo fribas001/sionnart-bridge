@@ -1,0 +1,121 @@
+{
+  "analysis": {
+    "definition": "All valid paths, RX0/RX antenna0/TX0/TX antenna0. Gain=10*log10(sum(|a|^2)); not a coherent sum, not array-combined received power.",
+    "foliage": {
+      "frames": 50,
+      "minimum_foliage_gain_change_db": [
+        48.342697244659504,
+        41.5656262775976,
+        10.02249661009617,
+        1.4417432435459574,
+        17.025981370666685
+      ],
+      "median_change_db": 17.025981370666685,
+      "raw_arrays_verified": 50,
+      "maximum_recalculation_error": 1.4210854715202004e-14,
+      "realization_to_generator_seed": [
+        1,
+        2,
+        4,
+        5,
+        6
+      ]
+    },
+    "seed_ensemble": {
+      "n": 50,
+      "min_gain_db": -127.78624996864166,
+      "max_gain_db": -82.46111875846012,
+      "range_db": 45.32513121018154,
+      "median_gain_db": -108.93153593705182,
+      "quartiles_db": [
+        -116.68067108785016,
+        -104.30791162570814
+      ],
+      "rho_area": -0.0844657863145258,
+      "rho_corridor": -0.6454261704681872,
+      "source": "original exported summaries; limited CIR components are not used to recompute full-path power"
+    },
+    "native_comparison": {
+      "recalculated": true,
+      "output": "native_comparison"
+    },
+    "numerical_stability": {
+      "recalculated": true,
+      "output": "numerical_stability"
+    }
+  },
+  "fresh_native_checks": {
+    "foliage": {
+      "calculations": 3,
+      "all_passed": true,
+      "max_gain_error_db": 1.050141747782618e-06,
+      "max_rms_delay_error_ns": 1.891944303444859e-07,
+      "exact_path_counts_and_los": true
+    },
+    "seed_ensemble": {
+      "calculations": 50,
+      "all_passed": true,
+      "max_gain_error_db": 3.400800764552514e-06,
+      "max_rms_delay_error_ns": 7.811923010692112e-07,
+      "exact_path_counts_and_los": true
+    }
+  },
+  "geometry_reconstruction": [
+    {
+      "study": "seed_ensemble",
+      "states": 50,
+      "max_selected_tree_descriptor_error": 0.0,
+      "checked_fields": [
+        "leaf_area_estimate_m2",
+        "wood_surface_area_m2",
+        "leaf_component_count"
+      ]
+    },
+    {
+      "study": "exploratory_depth",
+      "states": 20,
+      "max_selected_tree_descriptor_error": 0.0,
+      "checked_fields": [
+        "leaf_area_estimate_m2",
+        "wood_surface_area_m2",
+        "leaf_component_count"
+      ]
+    },
+    {
+      "study": "exploratory_rays",
+      "states": 20,
+      "max_selected_tree_descriptor_error": 0.0,
+      "checked_fields": [
+        "leaf_area_estimate_m2",
+        "wood_surface_area_m2",
+        "leaf_component_count"
+      ]
+    }
+  ],
+  "packaged_model_operator_check": {
+    "source_unchanged": true,
+    "source_sha256": "b455391bae8d6997731ff2e06ef35619edac80177c240aff45c656db905076ce",
+    "one_warmup_pair_completed": true,
+    "path_count_bridge": 68,
+    "path_count_native": 68,
+    "gain_difference_db": 1.050141747782618e-06,
+    "points_imported": 362,
+    "geometry_nodes_group": "Sionna_Paths",
+    "note": "Single warm-up pair verifies packaged model -> add-on export -> worker -> Blender attributed import and native route. Not an additional timing study."
+  },
+  "notebooks": [
+    {
+      "notebook": "01_Reproduce_reported_results.ipynb",
+      "code_cells_executed": 3,
+      "status": "PASS",
+      "method": "Sequential Python code-cell execution; no Jupyter kernel/UI used. New simulations disabled."
+    },
+    {
+      "notebook": "02_Run_native_Sionna.ipynb",
+      "code_cells_executed": 3,
+      "status": "PASS",
+      "method": "Sequential Python code-cell execution; no Jupyter kernel/UI used. New simulations disabled."
+    }
+  ],
+  "original_blend_unchanged": true
+}

@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "required_sionna_rt": "2.1.0",
+  "runtime_variant": null,
+  "scene": {
+    "frequency_hz": 26000000000.0,
+    "bandwidth_hz": 1000000.0,
+    "temperature_k": 293.0,
+    "merge_shapes": true
+  },
+  "arrays": {
+    "tx": {
+      "pattern": "tr38901",
+      "num_rows": 4,
+      "num_cols": 4,
+      "vertical_spacing": 0.5,
+      "horizontal_spacing": 0.5,
+      "polarization": "V",
+      "polarization_model": "tr38901_2"
+    },
+    "rx": {
+      "pattern": "iso",
+      "num_rows": 1,
+      "num_cols": 1,
+      "vertical_spacing": 0.5,
+      "horizontal_spacing": 0.5,
+      "polarization": "V",
+      "polarization_model": "tr38901_2"
+    }
+  },
+  "devices": {
+    "tx": {
+      "name": "TX_001",
+      "position": [
+        0.0,
+        -10.0,
+        7.0
+      ],
+      "look_at": [
+        0.0,
+        10.0,
+        7.0
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "power_dbm": 44.0
+    },
+    "rx": {
+      "name": "RX_001",
+      "position": [
+        0.0,
+        10.0,
+        7.0
+      ],
+      "look_at": [
+        0.0,
+        -10.0,
+        7.0
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "solver": {
+    "seed": 42,
+    "diffuse_reflection": true,
+    "synthetic_array": true,
+    "specular_reflection": true,
+    "los": true,
+    "samples_per_src": 10000000,
+    "max_num_paths_per_src": 10000000,
+    "diffraction_lit_region": true,
+    "diffraction": true,
+    "max_depth": 15,
+    "edge_diffraction": true,
+    "refraction": true
+  },
+  "deterministic": true,
+  "materials": {
+    "leaf": {
+      "relative_permittivity": 12.544512,
+      "scattering_coefficient": 0.20000000298023224,
+      "thickness": 0.00019999999494757503,
+      "xpd_coefficient": 0.0,
+      "conductivity": 19.620737223661013,
+      "scattering_pattern": "lambertian"
+    },
+    "wood": {
+      "relative_permittivity": 5.415702479338843,
+      "scattering_coefficient": 0.17999999225139618,
+      "thickness": 0.004000000189989805,
+      "xpd_coefficient": 0.0,
+      "conductivity": 3.29072418653335,
+      "scattering_pattern": "lambertian"
+    }
+  },
+  "comparison": {
+    "gain_tolerance_db": 0.01,
+    "delay_tolerance_ns": 0.01
+  },
+  "scenes": [
+    {
+      "id": "foliage_frame_01",
+      "frame": 1,
+      "geometry_seed": 1,
+      "xml": "scenes/foliage_frame_01/scene.xml",
+      "material_bindings": {
+        "sb_plant_leaf_p833_004_4f3614": "leaf",
+        "sb_plant_twig_p833_003_739755": "wood"
+      },
+      "reference_npz": "evidence/trial_1/foliage_frame_01/bridge_paths.npz",
+      "reference_metrics": {
+        "path_count": 68,
+        "los_available": false,
+        "total_power_db": -127.07061426968406,
+        "strongest_path_gain_db": -133.6840497147212,
+        "first_arrival_ns": 67.86688544480057,
+        "mean_excess_delay_ns": 3.7942343609720077,
+        "rms_delay_spread_ns": 3.543424264887204
+      }
+    },
+    {
+      "id": "foliage_frame_09",
+      "frame": 9,
+      "geometry_seed": 1,
+      "xml": "scenes/foliage_frame_09/scene.xml",
+      "material_bindings": {
+        "sb_plant_leaf_p833_004_4f3614": "leaf",
+        "sb_plant_twig_p833_003_739755": "wood"
+      },
+      "reference_npz": "evidence/trial_1/foliage_frame_09/bridge_paths.npz",
+      "reference_metrics": {
+        "path_count": 301,
+        "los_available": false,
+        "total_power_db": -78.72791702502455,
+        "strongest_path_gain_db": -80.70606366293848,
+        "first_arrival_ns": 66.71281482795166,
+        "mean_excess_delay_ns": 0.007603050856578852,
+        "rms_delay_spread_ns": 0.10684037102049569
+      }
+    },
+    {
+      "id": "foliage_frame_10",
+      "frame": 10,
+      "geometry_seed": 1,
+      "xml": "scenes/foliage_frame_10/scene.xml",
+      "material_bindings": {
+        "sb_plant_twig_p833_003_739755": "wood"
+      },
+      "reference_npz": "evidence/trial_1/foliage_frame_10/bridge_paths.npz",
+      "reference_metrics": {
+        "path_count": 188,
+        "los_available": true,
+        "total_power_db": -78.75517915848765,
+        "strongest_path_gain_db": -78.76785055287476,
+        "first_arrival_ns": 66.71281482795166,
+        "mean_excess_delay_ns": 0.004342898764482203,
+        "rms_delay_spread_ns": 0.08321780979018387
+      }
+    }
+  ]
+}
