@@ -1,4 +1,4 @@
-# SionnaRT-Bridge 2.0.0
+# SionnaRT-Bridge 2.1.0
 
 The current [installation and workflow guide](../src/sionnart_bridge/README.md) covers the tested Sionna RT 2.1.0 environment, procedural experiments, exports and analysis.
 

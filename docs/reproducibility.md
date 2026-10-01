@@ -1,5 +1,8 @@
 # Reproducible experiments
 
+The current procedural vegetation study uses add-on **2.1.0** and has archive DOI **[10.5281/zenodo.23081848](https://doi.org/10.5281/zenodo.23081848)**. Its [scripts, notebooks and instructions](../reproducibility/vegetation/README.md) distinguish original raw outputs, reconstructed inputs and new verification runs. The archive stores the large Blender project and datasets; GitHub maintains the software and lightweight reproduction material.
+
+
 Keep the source `.blend`, external assets, extension version/commit, solver environment and simulation-time exports. Use procedural mode when meshes vary; intentional static cache reuse does not track later edits.
 
 Record geometry-generator inputs and seeds separately from solver seeds. Join completed observations by run ID, category, frame and device link. Optional full Geometry Nodes JSON retains more scene context; compact parameter records and vegetation measurements are embedded with paths results. Prepared inputs alone do not establish completion.

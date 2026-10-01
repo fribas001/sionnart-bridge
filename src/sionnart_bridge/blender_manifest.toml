@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "sionnart_bridge"
-version = "2.0.0"
+version = "2.1.0"
 name = "SionnaRT-Bridge"
 tagline = "Run Sionna RT simulations and visualize results in Blender"
 maintainer = "Felipe Oliveira Ribas <felipe.oliveiraribas@ugent.be>"
@@ -40,6 +40,7 @@ paths = [
   "plant_materials_blender.py",
   "radio_map_3d_worker.py",
   "radio_map_worker.py",
+  "radio_map_orientation.py",
   "result_export_worker.py",
   "sionna_worker.py",
   "tests/blender_geometry_metadata.py",
@@ -50,6 +51,8 @@ paths = [
   "tests/blender_release_edges.py",
   "tests/blender_release_live.py",
   "tests/blender_release_workflows.py",
+  "tests/blender_radio_map_orientation.py",
+  "tests/native_radio_map_orientation.py",
   "tests/blender_vegetation_metrics.py",
   "tests/native_geometry_metadata.py",
   "tests/native_plant_materials.py",
@@ -62,6 +65,7 @@ paths = [
   "tests/test_parameter_analysis.py",
   "tests/test_plant_materials.py",
   "tests/test_release_reliability.py",
+  "tests/test_radio_map_orientation.py",
   "tests/test_report_math.cjs",
   "tests/test_vegetation_metrics.py",
   "tests/test_worker_runtime.py",

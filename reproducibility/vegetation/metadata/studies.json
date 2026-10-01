@@ -1,0 +1,90 @@
+[
+  {
+    "study": "foliage_r1",
+    "run_id": "48ecb6a9",
+    "frames": 10,
+    "selected_tree": "Tree_seeds.001",
+    "source_metadata_sha256": "40a631258e12227d1902facf47510b785f8ba4ce52e1a1cfcb0d3f858e69dde5",
+    "configurations": "data/foliage_r1/configurations.json",
+    "records": "data/foliage_r1/records.json",
+    "original_raw_arrays": 10,
+    "original_frozen_scenes": 10
+  },
+  {
+    "study": "foliage_r2",
+    "run_id": "b283a31a",
+    "frames": 10,
+    "selected_tree": "Tree_seeds.002",
+    "source_metadata_sha256": "a5542cb50b5b38e4d17fee91e0707443f232ff4a1f3c025b60b72b4b88083c62",
+    "configurations": "data/foliage_r2/configurations.json",
+    "records": "data/foliage_r2/records.json",
+    "original_raw_arrays": 10,
+    "original_frozen_scenes": 10
+  },
+  {
+    "study": "foliage_r3",
+    "run_id": "a2e788e5",
+    "frames": 10,
+    "selected_tree": "Tree_seeds.003",
+    "source_metadata_sha256": "bfddb0e201caef8c34ab6d99559ac7bbd596f897e7ec3fe40bfeda9c609c0dba",
+    "configurations": "data/foliage_r3/configurations.json",
+    "records": "data/foliage_r3/records.json",
+    "original_raw_arrays": 10,
+    "original_frozen_scenes": 10
+  },
+  {
+    "study": "foliage_r4",
+    "run_id": "909057d2",
+    "frames": 10,
+    "selected_tree": "Tree_seeds.004",
+    "source_metadata_sha256": "1ec2d608512e51cdd7a4bf3a48f90e8f6b2c21534140223fe3ba4f45aaf81178",
+    "configurations": "data/foliage_r4/configurations.json",
+    "records": "data/foliage_r4/records.json",
+    "original_raw_arrays": 10,
+    "original_frozen_scenes": 10
+  },
+  {
+    "study": "foliage_r5",
+    "run_id": "c4976d80",
+    "frames": 10,
+    "selected_tree": "Tree_seeds.005",
+    "source_metadata_sha256": "2362793baf6ec85ef01c161d6637970273f9fb49d1e58d1297c72a0ebab8dbb4",
+    "configurations": "data/foliage_r5/configurations.json",
+    "records": "data/foliage_r5/records.json",
+    "original_raw_arrays": 10,
+    "original_frozen_scenes": 10
+  },
+  {
+    "study": "seed_ensemble",
+    "run_id": "dbb016d9",
+    "frames": 50,
+    "selected_tree": "Tree_seeds",
+    "source_metadata_sha256": "a8137ebbc3b74738fc2d27289d161e0f16e9b07629c6dd2b4a55ce88319a3027",
+    "configurations": "data/seed_ensemble/configurations.json",
+    "records": "data/seed_ensemble/records.json",
+    "original_raw_arrays": 0,
+    "original_frozen_scenes": 0
+  },
+  {
+    "study": "exploratory_depth",
+    "run_id": "315407f5",
+    "frames": 20,
+    "selected_tree": "Tree_convergence",
+    "source_metadata_sha256": "cb71a0fea4852c881ea02252b44be635d8b55613c8d1ebe9b494f8ae07416ed3",
+    "configurations": "data/exploratory_depth/configurations.json",
+    "records": "data/exploratory_depth/records.json",
+    "original_raw_arrays": 0,
+    "original_frozen_scenes": 0
+  },
+  {
+    "study": "exploratory_rays",
+    "run_id": "6ff7bb30",
+    "frames": 20,
+    "selected_tree": "Tree_convergence",
+    "source_metadata_sha256": "0e85e76244c5f73f02b78191d59ccabfcade59949375161aaaf9c9ff4278b301",
+    "configurations": "data/exploratory_rays/configurations.json",
+    "records": "data/exploratory_rays/records.json",
+    "original_raw_arrays": 0,
+    "original_frozen_scenes": 0
+  }
+]

@@ -47,7 +47,7 @@ a differently named group.
 
 ## Blender requirements
 
-The SoftwareX release targets:
+The current release targets:
 
 - Blender 5.2 or newer;
 - Blender Python 3.13 in the reference environment;
@@ -74,7 +74,7 @@ assets/blender/sionnart_geometry_nodes_1.0.0.blend
 These files are not identical and should not be treated as interchangeable.
 
 The `1.0.0` filename identifies that legacy reference asset; it is **not** the
-current SionnaRT-Bridge release version. The current v1.8.2 extension uses the
+current SionnaRT-Bridge release version. The current v2.1.0 extension uses the
 bundled unversioned library under `src/sionnart_bridge/assets/`.
 
 Unless reproducing an older workflow that explicitly depends on the legacy

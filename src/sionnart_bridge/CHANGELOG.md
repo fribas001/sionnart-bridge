@@ -1,3 +1,12 @@
+# 2.1.0
+
+- Added XY (default), XZ, YZ and custom XYZ rotation for planar 2D radio maps.
+- Propagated orientation through Sionna computation, per-frame metadata, CSV/HDF5 and embedded Geometry Nodes visualization, including animated rotations.
+- Added independent cell widths and oriented rectangular tiles for path gain, RSS and SINR. New node groups preserve legacy groups and saved user edits.
+- Corrected HDF5 coordinate detection so vertical grids are not labelled as horizontal XY grids. Exports include local plane coordinates and the world-space plane basis.
+- Automatic TX centering follows the selected plane while retaining its normal offset; XY behavior remains unchanged.
+- Added native Blender/Sionna orientation, animation, persistence and export regression checks.
+
 # 2.0.0
 
 This release consolidates procedural simulation, vegetation measurement and parameter analysis with a broader workflow regression suite.

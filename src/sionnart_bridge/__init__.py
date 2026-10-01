@@ -49,7 +49,9 @@ from . import parameter_study_blender as _parameter_study
 from . import vegetation_blender as _vegetation
 from bpy_extras.io_utils import ImportHelper
 
-_ADDON_VERSION = "2.0.0"
+_ADDON_VERSION = "2.1.0"
+
+from . import radio_map_orientation as _map_orientation
 
 _ENV_COLLECTION = "sionna_env"
 _SCENE_COLLECTION = "scene"
@@ -80,7 +82,7 @@ _RADIO_MAP_MODE_DEFINITIONS = {
     "path_gain": {
         "label": "Path Gain",
         "name_token": "PathGain",
-        "node_group": "Sionna_radio_map_pathgain_node",
+        "node_group": "Sionna_radio_map_pathgain_oriented_node",
         "linear_attribute": "path_gain",
         "db_attribute": "path_gain_db",
         "unit": "dB",
@@ -88,7 +90,7 @@ _RADIO_MAP_MODE_DEFINITIONS = {
     "rss": {
         "label": "RSS",
         "name_token": "RSS",
-        "node_group": "Sionna_radio_map_rss_node",
+        "node_group": "Sionna_radio_map_rss_oriented_node",
         "linear_attribute": "rss",
         "db_attribute": "rss_dbm",
         "unit": "dBm",
@@ -96,7 +98,7 @@ _RADIO_MAP_MODE_DEFINITIONS = {
     "sinr": {
         "label": "SINR",
         "name_token": "SINR",
-        "node_group": "Sionna_radio_map_sinr_node",
+        "node_group": "Sionna_radio_map_sinr_oriented_node",
         "linear_attribute": "sinr",
         "db_attribute": "sinr_db",
         "unit": "dB",
@@ -4935,6 +4937,13 @@ def _radio_map_settings_payload(settings):
         "surface_mode": surface_mode,
         "reference_mesh_blender_name": reference_obj.name if reference_obj else "",
     }
+    if surface_mode == "PLANAR":
+        payload.update({
+            "plane": str(getattr(settings, "radio_map_plane", "XY")),
+            "orientation": _map_orientation.orientation_from_settings(settings),
+            "orientation_convention": "Rz(alpha) Ry(beta) Rx(gamma), radians",
+            "size_coordinate_system": "local plane u,v",
+        })
     if surface_mode == "PROJECTED":
         if reference_obj is None:
             raise RuntimeError(
@@ -4956,7 +4965,7 @@ def _radio_map_parameter_signature(settings):
         "center_x", "center_y", "height", "size_x", "size_y",
         "cell_size_x", "cell_size_y", "metric", "surface_mode",
         "reference_mesh_blender_name",
-    ))
+    )) + tuple(payload.get("orientation", (0.0, 0.0, 0.0)))
 
 
 def _radio_map_parameters_change(context, frames):
@@ -5089,10 +5098,16 @@ def _auto_center_radio_map_payload(
         location = evaluated.matrix_world.translation
     except (ReferenceError, RuntimeError):
         return False
-    payload["center_x"] = float(location.x)
-    payload["center_y"] = float(location.y)
     if include_z:
+        payload["center_x"] = float(location.x)
+        payload["center_y"] = float(location.y)
         payload["center_z"] = float(location.z)
+    else:
+        center = _map_orientation.center_on_plane(
+            [payload["center_x"], payload["center_y"], payload["height"]],
+            location, _map_orientation.orientation_from_payload(payload),
+        )
+        payload["center_x"], payload["center_y"], payload["height"] = center
     payload["auto_center_tx_name"] = tx.name
     return True
 
@@ -6086,6 +6101,7 @@ _INTEGER_POINT_ATTRIBUTES = {
 }
 
 _VECTOR_POINT_ATTRIBUTE_COLUMNS = {
+    "map_rotation": ("rotation_x", "rotation_y", "rotation_z"),
     "surface_normal": ("normal_x", "normal_y", "normal_z"),
     "surface_tangent": ("tangent_x", "tangent_y", "tangent_z"),
     "surface_bitangent": ("bitangent_x", "bitangent_y", "bitangent_z"),
@@ -6813,6 +6829,12 @@ def _verify_radio_map_output(csv_path, config_path, status_path, started_ns):
         actual_sim = actual.get("simulation", {})
         expected_radio = expected.get("radio_map", {})
         actual_radio = actual.get("radio_map", {})
+        if expected_radio.get("surface_mode", "PLANAR") == "PLANAR":
+            expected_angles = _map_orientation.orientation_from_payload(expected_radio)
+            actual_angles = _map_orientation.orientation_from_payload(actual_radio)
+            if any(not _float_close(a, e, abs_tol=1e-5)
+                   for a, e in zip(actual_angles, expected_angles)):
+                raise RuntimeError(f"Radio-map frame {frame} orientation mismatch")
         checks = (
             ("frequency_ghz", actual_sim, expected_sim),
             ("max_depth", actual_sim, expected_sim),
@@ -9975,9 +9997,8 @@ class SIONNA_PG_Settings(PropertyGroup):
     radio_map_auto_center_on_tx: BoolProperty(
         name="Center Coverage on Moving TX",
         description=(
-            "For automatic TX-move 2D coverage runs, override Center X/Y with the "
-            "evaluated world position of the transmitter that moved. The measurement "
-            "plane Height stays unchanged"
+            "For automatic TX-move 2D coverage runs, follow the TX within the "
+            "measurement plane while keeping the plane's normal offset unchanged"
         ),
         default=True,
     )
@@ -10066,11 +10087,11 @@ class SIONNA_PG_Settings(PropertyGroup):
     radio_map_surface_mode: EnumProperty(
         name="Map Surface",
         description=(
-            "Use a regular horizontal plane or compute a Sionna MeshRadioMap on "
+            "Use an oriented rectangular plane or compute a Sionna MeshRadioMap on "
             "the triangles of a selected Blender mesh"
         ),
         items=(
-            ("PLANAR", "Planar Grid", "Regular XY radio-map grid"),
+            ("PLANAR", "Planar Grid", "Regular radio-map grid with selectable orientation"),
             (
                 "PROJECTED", "Projected Mesh",
                 "Use the selected evaluated mesh as the Sionna measurement surface; one triangle is one cell",
@@ -10088,6 +10109,29 @@ class SIONNA_PG_Settings(PropertyGroup):
         type=bpy.types.Object,
         poll=_radio_map_reference_mesh_poll,
     )
+    radio_map_plane: EnumProperty(
+        name="Map Plane",
+        description="Measurement plane; dimensions follow its two local axes",
+        items=(
+            ("XY", "XY (Horizontal)", "Local axes X/Y; normal +Z"),
+            ("XZ", "XZ (Vertical)", "Local axes X/Z; normal -Y"),
+            ("YZ", "YZ (Vertical)", "Local axes Y/Z; normal +X"),
+            ("CUSTOM", "Custom Rotation", "Rotate the XY plane using Blender XYZ Euler angles"),
+        ),
+        default="XY",
+    )
+    radio_map_rotation_x: FloatProperty(
+        name="Rotation X", description="Custom plane XYZ Euler X angle",
+        subtype="ANGLE", default=0.0,
+    )
+    radio_map_rotation_y: FloatProperty(
+        name="Rotation Y", description="Custom plane XYZ Euler Y angle",
+        subtype="ANGLE", default=0.0,
+    )
+    radio_map_rotation_z: FloatProperty(
+        name="Rotation Z", description="Custom plane XYZ Euler Z angle",
+        subtype="ANGLE", default=0.0,
+    )
     radio_map_center_x: FloatProperty(
         name="Center X",
         description="World-space X coordinate of the radio-map center",
@@ -10102,34 +10146,34 @@ class SIONNA_PG_Settings(PropertyGroup):
     )
     radio_map_height: FloatProperty(
         name="Height",
-        description="World-space Z height of the horizontal measurement plane",
+        description="World-space Z coordinate of the measurement-plane center",
         default=1.5,
         unit="LENGTH",
     )
     radio_map_size_x: FloatProperty(
         name="Area Size X",
-        description="Radio-map width along the world X axis",
+        description="Radio-map width along the first local plane axis (U)",
         default=100.0,
         min=0.001,
         unit="LENGTH",
     )
     radio_map_size_y: FloatProperty(
         name="Area Size Y",
-        description="Radio-map width along the world Y axis",
+        description="Radio-map width along the second local plane axis (V)",
         default=100.0,
         min=0.001,
         unit="LENGTH",
     )
     radio_map_cell_size_x: FloatProperty(
         name="Cell Size X",
-        description="Cell width along the world X axis",
+        description="Cell width along the first local plane axis (U)",
         default=1.0,
         min=0.001,
         unit="LENGTH",
     )
     radio_map_cell_size_y: FloatProperty(
         name="Cell Size Y",
-        description="Cell width along the world Y axis",
+        description="Cell width along the second local plane axis (V)",
         default=1.0,
         min=0.001,
         unit="LENGTH",

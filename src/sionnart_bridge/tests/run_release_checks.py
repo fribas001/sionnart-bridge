@@ -26,5 +26,7 @@ blender('vegetation','blender_vegetation_metrics.py',out/'vegetation')
 run('native_vegetation',[args.python,str(root/'tests/native_vegetation_metrics.py'),str(out/'vegetation')])
 for name,script in [('workflows','blender_release_workflows.py'),('edge_cases','blender_release_edges.py'),('live_updates','blender_release_live.py'),('optional_sensing','blender_optional_sensing.py')]:
  blender(name,script,out/name,args.python)
+blender('radio_map_orientation','blender_radio_map_orientation.py',out/'radio_map_orientation',args.python)
+run('orientation_exports',[args.python,str(root/'tests/native_radio_map_orientation.py'),str(out/'radio_map_orientation')])
 run('native_failures',[args.python,str(root/'tests/native_worker_failures.py'),str(out/'native_failures')])
 print('ALL_RELEASE_CHECKS_PASS',flush=True)

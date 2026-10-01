@@ -394,7 +394,7 @@ def write_path_frame_payloads(sim_group, config, manifest, h5py):
 def write_schema_metadata(meta_group, h5py):
     schema = _replace_group(meta_group, "schema")
     schema.attrs["hdf5_schema_version"] = HDF5_SCHEMA_VERSION
-    schema.attrs["coverage_2d_dimensions"] = "frame,y,x (planar) or frame,cell (projected)"
+    schema.attrs["coverage_2d_dimensions"] = "frame,y,x (local plane v,u) or frame,cell (projected)"
     schema.attrs["coverage_3d_dimensions"] = "frame,z,y,x"
     schema.attrs["coverage_3d_rank"] = 4
     schema.attrs["coverage_3d_primary_dataset"] = "/simulations/coverage_3d/data/values_db"
@@ -419,6 +419,14 @@ def _coverage_dimension_labels(category, key, shape, *, framed):
     shape = tuple(shape)
     prefix = ["frame"] if framed else []
     if category == "coverage_2d":
+        if key == "plane_orientation":
+            return prefix + ["alpha_beta_gamma"]
+        if key == "plane_center":
+            return prefix + ["xyz"]
+        if key == "plane_basis":
+            return prefix + ["u_v_normal", "xyz"]
+        if key in {"plane_u", "plane_v"}:
+            return prefix + ["x" if key == "plane_u" else "y"]
         if key in {
             "values", "values_db", "associated_tx", "coverage_valid", "metric_norm",
             "path_gain", "path_gain_db", "rss", "rss_dbm", "sinr", "sinr_db",
@@ -460,12 +468,19 @@ def _coverage_dimension_labels(category, key, shape, *, framed):
     return prefix + [f"dim_{index}" for index in range(len(shape))]
 
 
-def _rectilinear_coordinates(category, centers):
+def _rectilinear_coordinates(category, centers, *, orientation=None):
     centers = np.asarray(centers)
     if category == "coverage_2d" and centers.ndim == 3 and centers.shape[-1] == 3:
+        # Singleton axes cannot reveal orientation from positions alone.
+        if orientation is not None and not np.allclose(orientation, 0, atol=1e-9):
+            return {}
         x = centers[0, :, 0]
         y = centers[:, 0, 1]
-        if np.allclose(centers[:, :, 0], x[None, :]) and np.allclose(centers[:, :, 1], y[:, None]):
+        if (np.allclose(centers[:, :, 0], x[None, :])
+                and np.allclose(centers[:, :, 1], y[:, None])
+                and np.allclose(centers[:, :, 2], centers[0, 0, 2])
+                and (len(x) == 1 or np.all(np.diff(x) > 0))
+                and (len(y) == 1 or np.all(np.diff(y) > 0))):
             z = centers[:, :, 2]
             return {"x": x, "y": y, "z_plane": np.asarray(float(np.nanmean(z)))}
     if category == "coverage_3d" and centers.ndim == 4 and centers.shape[-1] == 3:
@@ -485,7 +500,8 @@ def _inspect_coverage_archives(config, category):
     """Inspect frame NPZ files without retaining all maps in memory."""
     records = []
     coordinate_keys = {
-        "coverage_2d": {"cell_centers", "primitive_index", "surface_normal", "cell_area", "triangle_vertices"},
+        "coverage_2d": {"cell_centers", "primitive_index", "surface_normal", "cell_area", "triangle_vertices",
+                        "plane_orientation", "plane_center", "plane_basis", "plane_u", "plane_v"},
         "coverage_3d": {"cell_centers", "layer_heights"},
     }[category]
     for frame in config.get("frames") or []:
@@ -628,7 +644,10 @@ def write_coverage_tensor_payloads(sim_group, config, manifest, h5py, category):
         first_centers = np.asarray(first_archive["cell_centers"]) if "cell_centers" in first_archive.files else None
         centers_are_shared = _shared_coordinate(inspections, "cell_centers")
         rect = (
-            _rectilinear_coordinates(category, first_centers)
+            _rectilinear_coordinates(
+                category, first_centers,
+                orientation=first_archive["plane_orientation"] if "plane_orientation" in first_archive.files else None,
+            )
             if first_centers is not None and centers_are_shared else {}
         )
         for axis in ("x", "y", "z"):
@@ -636,6 +655,16 @@ def write_coverage_tensor_payloads(sim_group, config, manifest, h5py, category):
                 _make_scale(coords, axis, rect[axis], h5py, axis)
         if "z_plane" in rect:
             _safe_dataset(coords, "z_plane", rect["z_plane"], h5py)
+        if category == "coverage_2d" and first_centers is not None and first_centers.ndim == 3:
+            sim_group.attrs["spatial_axes"] = "y=local plane v; x=local plane u"
+            sim_group.attrs["world_coordinates"] = "coordinates/cell_centers (x,y,z in metres)"
+            sim_group.attrs["orientation_convention"] = "plane_orientation=(alpha,beta,gamma) radians; Rz Ry Rx"
+            sim_group.attrs["plane_basis_convention"] = "rows are world-space u,v,normal unit vectors"
+            for axis, key in (("u", "plane_u"), ("v", "plane_v")):
+                if key in first_archive.files and _shared_coordinate(inspections, key):
+                    scale = _make_scale(coords, axis, first_archive[key], h5py, axis)
+                    scale.attrs["units"] = "m"
+                    scale.attrs["coordinate_system"] = "local plane, relative to plane_center"
         if category == "coverage_2d" and first_centers is not None and first_centers.ndim == 2:
             _make_scale(coords, "cell", np.arange(first_centers.shape[0], dtype=np.int32), h5py, "cell")
         if category == "coverage_3d" and "layer_heights" in first_archive.files and "z" not in coords:
@@ -648,6 +677,10 @@ def write_coverage_tensor_payloads(sim_group, config, manifest, h5py, category):
         _make_scale(coords, "tx", tx_names[0], h5py, "tx")
 
     scale_map = {name: coords[name] for name in ("frame", "x", "y", "z", "cell", "tx", "xyz") if name in coords}
+    if category == "coverage_2d":
+        for label, local_axis in (("x", "u"), ("y", "v")):
+            if local_axis in coords:
+                scale_map[label] = coords[local_axis]
     for axis in ("x", "y", "z"):
         if axis in coords:
             coords[axis].attrs["units"] = "m"
@@ -659,7 +692,8 @@ def write_coverage_tensor_payloads(sim_group, config, manifest, h5py, category):
         data_group.attrs["primary_dataset"] = "values_db"
         data_group.attrs["description"] = "Animated 3D coverage volumes; select one frame to obtain a z,y,x volume."
     coordinate_keys = {
-        "coverage_2d": {"cell_centers", "primitive_index", "surface_normal", "cell_area", "triangle_vertices"},
+        "coverage_2d": {"cell_centers", "primitive_index", "surface_normal", "cell_area", "triangle_vertices",
+                        "plane_orientation", "plane_center", "plane_basis", "plane_u", "plane_v"},
         "coverage_3d": {"cell_centers", "layer_heights"},
     }[category]
 

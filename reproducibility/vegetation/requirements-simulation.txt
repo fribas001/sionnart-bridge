@@ -1,0 +1,4 @@
+sionna-rt==2.1.0
+mitsuba==3.9.1
+drjit==1.5.0
+numpy==2.5.2
