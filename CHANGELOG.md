@@ -1,3 +1,9 @@
+# Unreleased
+
+- Document the separately installable DiffeRT-Bridge companion and the shared Blender comparison workflow.
+- Add an optional, version/hash-checked Windows CPU LLVM adapter with reproducible build, read-only preflight and backup/restore. It changes JIT object format and module lifetime; Sionna solver formulas remain unchanged.
+- Record diffraction validation scope, known dielectric discrepancies and explicitly isolated physics candidates. Preserve the existing CUDA and vegetation validation claims.
+
 # 2.1.0
 
 - Added XY (default), XZ, YZ and custom XYZ rotation for planar 2D radio maps.

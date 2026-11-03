@@ -6,6 +6,7 @@ A Blender extension for procedural scene preparation, Sionna RT simulation, spat
 
 - [Install and run](src/sionnart_bridge/README.md)
 - [Tested environment and release verification](docs/validation.md)
+- [Compare with DiffeRT and optional Windows CPU workaround](docs/dual-engine-workflow.md)
 - [Vegetation material presets](src/sionnart_bridge/PLANT_MATERIALS.md)
 - [Vegetation measurements: definitions and units](src/sionnart_bridge/VEGETATION_METRICS.md)
 - [Reproducible experiments](docs/reproducibility.md)
